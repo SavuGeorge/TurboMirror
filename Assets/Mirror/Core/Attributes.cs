@@ -3,6 +3,57 @@ using UnityEngine;
 
 namespace Mirror
 {
+
+
+    /// <summary>
+    /// Used to specify the maximum value of a field. For example, a normal int has 32 bits and supports values between [-2147483647, 2147483647]
+    /// Using only 16 bits still supports values between [-65535, 65535]. Most values in your game will not require the full ranges of their types, so big reductions in bandwidth can be achieved.
+    /// Used to determine the number of bits to use when serializing an integer field over the network.
+    /// Reduces bandwidth by packing multiple small integer values into fewer bytes.
+    /// Example: [BitPacked(5)] uses only 5 bits instead of 32 for values 0-31.
+    /// Adjacent bit-packed fields are automatically grouped and packed together.
+    /// Supports 1-32 bits per field. Only applicable to int fields.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field)]
+    public class IntegerBitPackedAttribute : Attribute
+    {
+        public int BitCount { get; }
+
+        public IntegerBitPackedAttribute(int bitCount)
+        {
+            if (bitCount < 1 || bitCount > 32)
+                throw new ArgumentException("Bit count must be between 1 and 32");
+
+            BitCount = bitCount;
+        }
+    }
+
+
+    /// <summary>
+    /// Used to specify bit packing parameters for decimal/floating point fields.
+    /// Allows efficient network serialization by defining the range and precision requirements.
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Field)]
+    public class DecimalBitPackedAttribute : Attribute
+    {
+        public bool Signed { get; }
+        public float MaxValue { get; }
+        public float MinPrecision { get; }
+
+        public DecimalBitPackedAttribute(bool signed, float maxValue, float minPrecision)
+        {
+            if (maxValue <= 0)
+                throw new ArgumentException("MaxValue must be greater than 0");
+
+            if (minPrecision <= 0 || minPrecision >= 1)
+                throw new ArgumentException("MinPrecision must be greater than 0 and less than 1");
+
+            Signed = signed;
+            MaxValue = maxValue;
+            MinPrecision = minPrecision;
+        }
+    }
+
     /// <summary>
     /// SyncVars are used to automatically synchronize a variable between the server and all clients. The direction of synchronization depends on the Sync Direction property, ServerToClient by default.
     /// <para>

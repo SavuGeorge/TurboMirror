@@ -6,6 +6,7 @@ using Mono.CecilX.Cil;
 // Unity.Mirror.CodeGen assembly definition file in the Editor, and add CecilX.Rocks.
 // otherwise we get an unknown import exception.
 using Mono.CecilX.Rocks;
+using Mirror.Weaver;
 
 namespace Mirror.Weaver
 {
@@ -271,22 +272,136 @@ namespace Mirror.Weaver
         // Find all fields in type and write them
         bool WriteAllFields(TypeReference variable, ILProcessor worker, ref bool WeavingFailed)
         {
+            // Track bit-packed fields for batching
+            List<(FieldDefinition field, int bitCount)> bitPackedFields = new List<(FieldDefinition, int)>();
+            int currentBitOffset = 0;
+
             foreach (FieldDefinition field in variable.FindAllPublicFields())
             {
-                MethodReference writeFunc = GetWriteFunc(field.FieldType, ref WeavingFailed);
-                // need this null check till later PR when GetWriteFunc throws exception instead
-                if (writeFunc == null) { return false; }
+                // Get bit count - either from attribute or full size of type
+                bool isDecimalType = false;
 
-                FieldReference fieldRef = assembly.MainModule.ImportReference(field);
+                if (isDecimalType)
+                {
+                    BitpackingHelpers.DecimalBitPackedInfo decimalInfo = BitpackingHelpers.GetDecimalBitPackInfo(field);
+                    BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(decimalInfo);
 
-                worker.Emit(OpCodes.Ldarg_0);
-                worker.Emit(OpCodes.Ldarg_1);
-                worker.Emit(OpCodes.Ldfld, fieldRef);
-                worker.Emit(OpCodes.Call, writeFunc);
+                }
+                else
+                {
+                    int bitCount = BitpackingHelpers.GetIntegerBitPackedCount(field);
+                    if (bitCount <= 0)
+                    {
+                        bitCount = GetTypeSizeInBits(field.FieldType);
+                    }
+
+                    // Add to bit-packed collection
+                    bitPackedFields.Add((field, bitCount));
+                    currentBitOffset += bitCount;
+
+                    // If we've accumulated enough bits, write the batch
+                    // Using 32 bits as the batch size for now
+                    if (currentBitOffset >= 32)
+                    {
+                        WriteBitPackedBatch(worker, bitPackedFields, ref WeavingFailed);
+                        bitPackedFields.Clear();
+                        currentBitOffset = 0;
+                    }
+                }
+            }
+
+            // Flush any remaining bit-packed fields
+            if (bitPackedFields.Count > 0)
+            {
+                WriteBitPackedBatch(worker, bitPackedFields, ref WeavingFailed);
             }
 
             return true;
         }
+
+
+       
+        // TODO MAKE THIS GOOD
+        void WriteBitPackedBatch(ILProcessor worker, List<(FieldDefinition field, int bitCount)> fields, ref bool WeavingFailed)
+        {
+            // Local variable to accumulate bits
+            worker.Emit(OpCodes.Ldc_I4_0); // uint packed = 0
+            worker.Emit(OpCodes.Stloc_0);
+
+            int bitOffset = 0;
+
+            foreach (var (field, bitCount) in fields)
+            {
+                FieldReference fieldRef = assembly.MainModule.ImportReference(field);
+
+                // Load the field value
+                worker.Emit(OpCodes.Ldarg_1); // load 'value' parameter
+                worker.Emit(OpCodes.Ldfld, fieldRef);
+
+                // Create bit mask for the field
+                uint mask = (uint)((1 << bitCount) - 1);
+
+                // Apply mask to ensure we only use specified bits
+                worker.Emit(OpCodes.Ldc_I4, (int)mask);
+                worker.Emit(OpCodes.And);
+
+                // Shift left by current bit offset
+                if (bitOffset > 0)
+                {
+                    worker.Emit(OpCodes.Ldc_I4, bitOffset);
+                    worker.Emit(OpCodes.Shl);
+                }
+
+                // OR with accumulated value
+                worker.Emit(OpCodes.Ldloc_0);
+                worker.Emit(OpCodes.Or);
+                worker.Emit(OpCodes.Stloc_0);
+
+                bitOffset += bitCount;
+            }
+
+            // Write the packed uint
+            worker.Emit(OpCodes.Ldarg_0); // writer
+            worker.Emit(OpCodes.Ldloc_0); // packed value
+
+            MethodReference writeUInt = GetWriteFunc(weaverTypes.Import<uint>(), ref WeavingFailed);
+            worker.Emit(OpCodes.Call, writeUInt);
+        }
+
+        // TODO: Surely there is something better we can do here no? 
+        int GetTypeSizeInBits(TypeReference type)
+        {
+            // Handle primitive types
+            switch (type.FullName)
+            {
+                case "System.Boolean":
+                    return 8; // Or 1 if you want to pack bools tightly
+                case "System.Byte":
+                case "System.SByte":
+                    return 8;
+                case "System.Int16":
+                case "System.UInt16":
+                    return 16;
+                case "System.Int32":
+                case "System.UInt32":
+                case "System.Single":
+                    return 32;
+                case "System.Int64":
+                case "System.UInt64":
+                case "System.Double":
+                    return 64;
+                default:
+                    // For enums, get the underlying type size
+                    if (type.Resolve()?.IsEnum ?? false)
+                    {
+                        return GetTypeSizeInBits(type.Resolve().GetEnumUnderlyingType());
+                    }
+                    // Default to 32 bits for unknown types (you might want to handle this differently)
+                    Log.Warning($"Unknown type size for {type.FullName}, defaulting to 32 bits");
+                    return 32;
+            }
+        }
+
 
         MethodDefinition GenerateCollectionWriter(TypeReference variable, TypeReference elementType, string writerFunction, ref bool WeavingFailed)
         {

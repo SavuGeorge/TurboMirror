@@ -5,6 +5,7 @@ using Mono.CecilX;
 using Mono.CecilX.Cil;
 using Mono.CecilX.Rocks;
 
+
 namespace Mirror.Weaver
 {
     // not static, because ILPostProcessor is multithreaded
