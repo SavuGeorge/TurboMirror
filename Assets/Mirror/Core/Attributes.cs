@@ -17,14 +17,19 @@ namespace Mirror
     [AttributeUsage(AttributeTargets.Field)]
     public class IntegerBitPackedAttribute : Attribute
     {
-        public int BitCount { get; }
+        public int Min { get; }
+        public int Max { get; }
+        public bool Signed { get; set; } = false;
 
-        public IntegerBitPackedAttribute(int bitCount)
+        public IntegerBitPackedAttribute(int min, int max, int bitCount)
         {
             if (bitCount < 1 || bitCount > 32)
                 throw new ArgumentException("Bit count must be between 1 and 32");
+            if (min > max)
+                throw new ArgumentException("Min value cannot be higher than Max value");
 
-            BitCount = bitCount;
+            Min = min;
+            Max = max;
         }
     }
 
