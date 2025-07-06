@@ -235,11 +235,20 @@ namespace Mirror.Weaver
 
             ILProcessor worker = writerFunc.Body.GetILProcessor();
 
-            if (!variable.Resolve().IsValueType)
-                WriteNullCheck(worker, ref WeavingFailed);
+            bool isBitpackedStruct = BitpackingHelpers.HasBitpackedAttribute(variable);
+            if (isBitpackedStruct)
+            {
+                if (!WriteAllFieldsBitpacked(variable, worker, ref WeavingFailed))
+                    return null;
+            }
+            else
+            {
+                if (!variable.Resolve().IsValueType)
+                    WriteNullCheck(worker, ref WeavingFailed);
 
-            if (!WriteAllFields(variable, worker, ref WeavingFailed))
-                return null;
+                if (!WriteAllFieldsClassic(variable, worker, ref WeavingFailed))
+                    return null;
+            }
 
             worker.Emit(OpCodes.Ret);
             return writerFunc;
@@ -269,8 +278,28 @@ namespace Mirror.Weaver
             worker.Emit(OpCodes.Call, GetWriteFunc(weaverTypes.Import<bool>(), ref WeavingFailed));
         }
 
+        bool WriteAllFieldsClassic(TypeReference variable, ILProcessor worker, ref bool WeavingFailed)
+        {
+            foreach (FieldDefinition field in variable.FindAllPublicFields())
+            {
+                MethodReference writeFunc = GetWriteFunc(field.FieldType, ref WeavingFailed);
+                // need this null check till later PR when GetWriteFunc throws exception instead
+                if (writeFunc == null) { return false; }
+
+                FieldReference fieldRef = assembly.MainModule.ImportReference(field);
+
+                worker.Emit(OpCodes.Ldarg_0);
+                worker.Emit(OpCodes.Ldarg_1);
+                worker.Emit(OpCodes.Ldfld, fieldRef);
+                worker.Emit(OpCodes.Call, writeFunc);
+            }
+
+            return true;
+        }
+
+
         // Find all fields in type and write them
-        bool WriteAllFields(TypeReference variable, ILProcessor worker, ref bool WeavingFailed)
+        bool WriteAllFieldsBitpacked(TypeReference variable, ILProcessor worker, ref bool WeavingFailed)
         {
             List<byte> bytes = new List<byte>();
             int bitOffset = 0;
@@ -291,41 +320,26 @@ namespace Mirror.Weaver
                 switch (typeName)
                 {
                     case "System.Boolean":
-                        WriteBitpackedBool(field, ref bitOffset, ref bytes);
                         break;
-                    case "System.Byte":
-                        WriteBitpackedByte(field, ref bitOffset, ref bytes);
-                        break;
+
                     case "System.SByte":
-                        WriteBitpackedSByte(field, ref bitOffset, ref bytes);
-                        break;
                     case "System.Int16":
-                        WriteBitpackedInt16(field, ref bitOffset, ref bytes);
-                        break;
-                    case "System.UInt16":
-                        WriteBitpackedUInt16(field, ref bitOffset, ref bytes);
-                        break;
                     case "System.Int32":
-                        WriteBitpackedInt32(field, ref bitOffset, ref bytes);
-                        break;
-                    case "System.UInt32":
-                        WriteBitpackedUInt32(field, ref bitOffset, ref bytes);
-                        break;
                     case "System.Int64":
-                        WriteBitpackedInt64(field, ref bitOffset, ref bytes);
                         break;
+
+                    case "System.Byte":
+                    case "System.UInt16":
+                    case "System.UInt32":
                     case "System.UInt64":
-                        WriteBitpackedUInt64(field, ref bitOffset, ref bytes);
                         break;
+
                     case "System.Single": 
-                        WriteBitpackedFloat(field, ref bitOffset, ref bytes);
-                        break;
                     case "System.Double":
-                        WriteBitpackedDouble(field, ref bitOffset, ref bytes);
                         break;
                     default:
                         WeavingFailed = true;
-                        throw new NotSupportedException($"Field type '{typeName}' is not supported for bit-packing serialization");
+                        throw new NotSupportedException($"Field type '{typeName}' is not currently supported for bit-packing serialization");
                 }
             }
             return true; 
@@ -333,124 +347,27 @@ namespace Mirror.Weaver
 
         void WriteBitpackedBool(bool value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
         {
-            WritePartialByte(1, value ? (byte)1 : (byte)0, ref bitOffset, ref bytes);
+            BitpackingHelpers.WritePartialByte(1, value ? (byte)1 : (byte)0, ref bitOffset, ref bytes);
         }
-
-
-        void WriteBitpackedByte(byte value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        void WriteBitpackedUnsignedIntegerType(ulong value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
         {
             BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
             format.Signed = false;
-            WritePartialByte(format.Bits, value, ref bitOffset, ref bytes);
+            BitpackingHelpers.WriteIntegerHelper((long)value, format, ref bitOffset, ref bytes);
         }
-        void WriteBitpackedUInt16(ushort value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        void WriteBitpackedIntegerType(long value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
         {
             BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
-            format.Signed = false;
-
-            // this is the one I think?? 
-
-            int bitsToWrite = format.Bits;
-            int remainderBits = bitsToWrite % 8;
-            if(remainderBits % bitsToWrite != 0)
-            {
-                WritePartialByte(remainderBits, (byte)(value >> (bitsToWrite - remainderBits)), ref bitOffset, ref bytes);
-                bitsToWrite -= remainderBits;
-            }
-            while(bitsToWrite > 0)
-            {
-                WritePartialByte(format.Bits, (byte)(value >> (bitsToWrite - 8)), ref bitOffset, ref bytes);
-                bitsToWrite -= 8;
-            }
-        }
-        void WriteBitpackedUInt32(int value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
-        {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
-            format.Signed = false;
-
-            if(format.Bits > 24) WritePartialByte(format.Bits, (byte)(value >> 24), ref bitOffset, ref bytes);
-            if(format.Bits > 16) WritePartialByte(format.Bits, (byte)(value >> 16), ref bitOffset, ref bytes);
-            if(format.Bits > 8) WritePartialByte(format.Bits, (byte)(value >> 8), ref bitOffset, ref bytes);
-            WritePartialByte(format.Bits, (byte)value, ref bitOffset, ref bytes);
-        }
-        void WriteBitpackedUInt64(long value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
-        {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
-            format.Signed = false;
-
-            if (format.Bits > 56) WritePartialByte(format.Bits, (byte)(value >> 56), ref bitOffset, ref bytes);
-            if (format.Bits > 48) WritePartialByte(format.Bits, (byte)(value >> 48), ref bitOffset, ref bytes);
-            if (format.Bits > 40) WritePartialByte(format.Bits, (byte)(value >> 40), ref bitOffset, ref bytes);
-            if (format.Bits > 32) WritePartialByte(format.Bits, (byte)(value >> 32), ref bitOffset, ref bytes);
-            if (format.Bits > 24) WritePartialByte(format.Bits, (byte)(value >> 24), ref bitOffset, ref bytes);
-            if (format.Bits > 16) WritePartialByte(format.Bits, (byte)(value >> 16), ref bitOffset, ref bytes);
-            if (format.Bits > 8) WritePartialByte(format.Bits, (byte)(value >> 8), ref bitOffset, ref bytes);
-            WritePartialByte(format.Bits, (byte)value, ref bitOffset, ref bytes);
+            BitpackingHelpers.WriteIntegerHelper(value, format, ref bitOffset, ref bytes);
         }
 
 
-        void WriteBitpackedSByte(FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
-        {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
-            if(format.Signed == false)
-
-        }
-        void WriteBitpackedInt16(FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
-        {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
-        }
-        void WriteBitpackedInt32(FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
-        {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
-        }
-        void WriteBitpackedInt64(FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
-        {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
-        }
-
-
-        void WriteBitpackedFloat(FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        void WriteBitpackedDecimalType(double value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
         {
             BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(field);
-        }
-        void WriteBitpackedDouble(FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
-        {
-            BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(field);
+            // TODO. Decimal helper. this one is gonna be more complicated
         }
 
-
-        // writes right-most (least significant bits) BITS from VALUE into BYTES
-        void WritePartialByte(int bits, byte value, ref int bitOffset, ref List<byte> bytes)
-        {
-            if (bits <= 0 || bits > 8)
-                throw new ArgumentException("bits must be between 1 and 8");
-
-            // keep the right-most bits
-            value = (byte)(value << (8 - bits));
-
-            int startByteIndex = bitOffset / 8;
-            int endByteIndex = (bitOffset + bits - 1) / 8;
-            int bitPos = bitOffset % 8;
-
-            // Ensure we have enough bytes in the list
-            if (bytes.Count-1 < endByteIndex)
-                bytes.Add(0);
-
-            int freeBitsInCurrentByte = 8 - bitPos;
-
-            // Shift the bits to the correct position within the byte
-            byte firstPart = (byte)(value >> bitPos);
-            bytes[startByteIndex] |= firstPart;
-
-            if (bits > freeBitsInCurrentByte)
-            {
-                // Write remainder to next byte (least significant bits)
-                byte secondPart = (byte)(value << freeBitsInCurrentByte);
-                bytes[startByteIndex + 1] |= secondPart;
-            }
-
-            bitOffset += bits;
-        }
 
 
 

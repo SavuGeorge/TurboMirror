@@ -4,6 +4,11 @@ using UnityEngine;
 namespace Mirror
 {
 
+    /// <summary>
+    /// Used to specify structs to use bitpacking with. 
+    /// </summary>
+    [AttributeUsage(AttributeTargets.Struct)]
+    public class Bitpacked : Attribute { }
 
     /// <summary>
     /// Used to specify the maximum value of a field. For example, a normal int has 32 bits and supports values between [-2147483647, 2147483647]
@@ -19,12 +24,9 @@ namespace Mirror
     {
         public int Min { get; }
         public int Max { get; }
-        public bool Signed { get; set; } = false;
 
-        public IntegerBitPackedAttribute(int min, int max, int bitCount)
+        public IntegerBitPackedAttribute(int min, int max)
         {
-            if (bitCount < 1 || bitCount > 32)
-                throw new ArgumentException("Bit count must be between 1 and 32");
             if (min > max)
                 throw new ArgumentException("Min value cannot be higher than Max value");
 
@@ -41,11 +43,11 @@ namespace Mirror
     [AttributeUsage(AttributeTargets.Field)]
     public class DecimalBitPackedAttribute : Attribute
     {
-        public bool Signed { get; }
-        public float MaxValue { get; }
-        public float MinPrecision { get; }
+        public double MinValue { get; }
+        public double MaxValue { get; }
+        public double MinPrecision { get; }
 
-        public DecimalBitPackedAttribute(bool signed, float maxValue, float minPrecision)
+        public DecimalBitPackedAttribute(double minValue, double maxValue, double minPrecision)
         {
             if (maxValue <= 0)
                 throw new ArgumentException("MaxValue must be greater than 0");
@@ -53,7 +55,7 @@ namespace Mirror
             if (minPrecision <= 0 || minPrecision >= 1)
                 throw new ArgumentException("MinPrecision must be greater than 0 and less than 1");
 
-            Signed = signed;
+            MinValue = minValue;
             MaxValue = maxValue;
             MinPrecision = minPrecision;
         }
