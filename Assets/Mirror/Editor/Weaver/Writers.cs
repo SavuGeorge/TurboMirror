@@ -301,6 +301,8 @@ namespace Mirror.Weaver
         // Find all fields in type and write them
         bool WriteAllFieldsBitpacked(TypeReference variable, ILProcessor worker, ref bool WeavingFailed)
         {
+            int weaverBitCounter = 0; // keeping track of how many bits we actually write, so we know if the type needs a final flush instruction or not
+
             MethodDefinition method = worker.Body.Method;
 
             // Add local variable for byte currentByte
@@ -327,6 +329,11 @@ namespace Mirror.Weaver
             //byte currentByte = 0;
             //int bitOffset = 0;
 
+            TypeReference bitpackingHelpersType = assembly.MainModule.ImportReference(typeof(BitpackingHelpers));
+            MethodReference writePartialByteRef = Resolvers.ResolveMethod(
+                bitpackingHelpersType, assembly, Log, "WritePartialByte", ref WeavingFailed);
+
+
             foreach (FieldDefinition field in variable.FindAllPublicFields())
             {
                 string typeName;
@@ -342,54 +349,87 @@ namespace Mirror.Weaver
                 switch (typeName)
                 {
                     case "System.Boolean":
+                        weaverBitCounter += 1;
+
+                        // equivalent to: 
+                        // BitpackingHelpers.WritePartialByte(writer, 1, value ? 1 : 0, ref bitOffset, ref currentByte);
+                        worker.Emit(OpCodes.Ldarg_0);  // Load writer (first param of generated method)
+                        worker.Emit(OpCodes.Ldc_I4_1); // Load 1 (bits to write)
+
+                        // Load field value and convert to byte
+                        worker.Emit(OpCodes.Ldarg_1);  // Load value object
+                        worker.Emit(OpCodes.Ldfld, field); // Get bool field
+                                                           // Convert bool to byte (0 or 1)
+
+                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);    // Load address of bitOffset
+                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);  // Load address of currentByte
+
+                        worker.Emit(OpCodes.Call, writePartialByteRef);
                         break;
 
                     case "System.SByte":
                     case "System.Int16":
                     case "System.Int32":
                     case "System.Int64":
+                        BitpackingHelpers.IntegerFormatInfo format_signed = BitpackingHelpers.GetIntegerBitPackedFormat(field);
+                        weaverBitCounter += format_signed.Bits + (format_signed.Signed ? 1 : 0);
                         break;
 
                     case "System.Byte":
                     case "System.UInt16":
                     case "System.UInt32":
                     case "System.UInt64":
+                        BitpackingHelpers.IntegerFormatInfo format_usigned = BitpackingHelpers.GetIntegerBitPackedFormat(field);
+                        format_usigned.Signed = false;
+                        weaverBitCounter += format_usigned.Bits;
                         break;
 
                     case "System.Single": 
                     case "System.Double":
+                        BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(field);
+                        weaverBitCounter += format.ExponentBits + format.MantissaBits + (format.Signed ? 1 : 0);
                         break;
+
                     default:
                         WeavingFailed = true;
                         throw new NotSupportedException($"Field type '{typeName}' is not currently supported for bit-packing serialization");
                 }
             }
 
-            // TODO:
-            // ILCode for:
-            // if(currentByte != 0) writer.Write(currentByte)
+            if (weaverBitCounter % 8 != 0) // we know at weave-time if we're gonna have a left-over partial byte or not
+            {
+                worker.Emit(OpCodes.Ldarg_0); // writer
+                worker.Emit(OpCodes.Ldloc, currentByteVarIndex); // currentByte
+                MethodReference writeByteFunc = GetWriteFunc(weaverTypes.Import<byte>(), ref WeavingFailed);
+                worker.Emit(OpCodes.Call, writeByteFunc);
+            }
+
             return true; 
         }
 
-        void WriteBitpackedBool(NetworkWriter writer, bool value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
+        static void WriteBitpackedBoolIL(NetworkWriter writer, bool value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
         {
             BitpackingHelpers.WritePartialByte(writer, 1, value ? (byte)1 : (byte)0, ref bitOffset, ref currentByte);
         }
-        void WriteBitpackedUnsignedIntegerType(NetworkWriter writer, ulong value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
+        static void WriteBitpackedUnsignedIntegerType(NetworkWriter writer, ulong value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
         {
             BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
             format.Signed = false;
             BitpackingHelpers.WriteIntegerHelper(writer, (long)value, format, ref bitOffset, ref currentByte);
         }
-        void WriteBitpackedIntegerType(NetworkWriter writer, long value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
+        static void WriteBitpackedIntegerType(NetworkWriter writer, long value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
         {
             BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
             BitpackingHelpers.WriteIntegerHelper(writer, value, format, ref bitOffset, ref currentByte);
         }
-        void WriteBitpackedDecimalType(NetworkWriter writer, double value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+
+        static void WriteBitpackedFloatType(NetworkWriter writer, float value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
         {
             BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(field);
-            // TODO. Decimal helper. this one is gonna be more complicated
+        }
+        static void WriteBitpackedDoubleType(NetworkWriter writer, double value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        {
+            BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(field);
         }
 
 

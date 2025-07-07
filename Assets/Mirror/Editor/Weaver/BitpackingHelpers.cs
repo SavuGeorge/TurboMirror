@@ -56,8 +56,8 @@ namespace Mirror.Weaver
                 {
                     if (attr.ConstructorArguments.Count == 2)
                     {
-                        min = (long)attr.ConstructorArguments[0].Value;
-                        max = (long)attr.ConstructorArguments[1].Value;
+                        min = (int)attr.ConstructorArguments[0].Value;
+                        max = (int)attr.ConstructorArguments[1].Value;
                     }
                 }
             }
@@ -70,7 +70,7 @@ namespace Mirror.Weaver
             long minMagnitude = min < 0 ? -min : min;
             long maxMagnitude = max < 0 ? -max : max;
             long formatMagnitude = minMagnitude > maxMagnitude ? minMagnitude : maxMagnitude;
-            format.Bits = FindNextPowerOf2Exponent(formatMagnitude) + 1;
+            format.Bits = (int)FindNextPowerOf2Exponent(formatMagnitude) + 1;
 
             return format; 
         }
@@ -102,8 +102,8 @@ namespace Mirror.Weaver
             DecimalFormatInfo format = new DecimalFormatInfo();
             format.Signed = (minValue < 0);
 
-            int emax = FindNextPowerOf2Exponent(maxValue);
-            int emin = FindPreviousPowerOf2Exponent(minPrecision);
+            long emax = FindNextPowerOf2Exponent(maxValue);
+            long emin = FindPreviousPowerOf2Exponent(minPrecision);
             Debug.Assert(emax >= emin);
 
             format.BiasExponent = (short)emin;
@@ -116,15 +116,15 @@ namespace Mirror.Weaver
             return format;
         }
 
-        static int FindNextPowerOf2Exponent(double x)
+        static long FindNextPowerOf2Exponent(double x)
         {
             if (x <= 0) throw new System.Exception("X must be positive");
-            return (int)System.Math.Ceiling(Log2(x));
+            return (long)System.Math.Ceiling(Log2(x));
         }
-        static int FindPreviousPowerOf2Exponent(double x)
+        static long FindPreviousPowerOf2Exponent(double x)
         {
             if (x <= 0) throw new System.Exception("X must be positive");
-            return (int)System.Math.Floor(Log2(x));
+            return (long)System.Math.Floor(Log2(x));
         }
 
         static double Log2(double x)
@@ -146,6 +146,19 @@ namespace Mirror.Weaver
                 WritePartialByte(writer, 8, (byte)(value >> (bitsToWrite - 8)), ref bitOffset, ref currentByte);
                 bitsToWrite -= 8;
             }
+        }
+
+        public static void WriteDoubleHelper(NetworkWriter writer, double value, DecimalFormatInfo format, ref int bitOffset, ref byte currentByte)
+        {
+            // 32 - bit IEEE 754
+            // 1 sign bit, 8 exponent bits, 23 mantissa bits
+
+        }
+        public static void WriteFloatHelper(NetworkWriter writer, float value, DecimalFormatInfo format, ref int bitOffset, ref byte currentByte)
+        {
+            // 64-bit IEEE 754
+            // 1 sign bit, 11 exponent bits, 52 mantissa bits
+
         }
 
         // writes right-most (least significant bits) BITS from VALUE into BYTES
