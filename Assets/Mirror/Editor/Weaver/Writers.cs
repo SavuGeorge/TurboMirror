@@ -301,15 +301,37 @@ namespace Mirror.Weaver
         // Find all fields in type and write them
         bool WriteAllFieldsBitpacked(TypeReference variable, ILProcessor worker, ref bool WeavingFailed)
         {
-            List<byte> bytes = new List<byte>();
-            int bitOffset = 0;
+            MethodDefinition method = worker.Body.Method;
+
+            // Add local variable for byte currentByte
+            TypeReference byteType = assembly.MainModule.ImportReference(typeof(byte));
+            VariableDefinition currentByteVar = new VariableDefinition(byteType);
+            method.Body.Variables.Add(currentByteVar);
+            int currentByteVarIndex = method.Body.Variables.Count - 1;
+
+            // Add local variable for int bitOffset
+            TypeReference intType = assembly.MainModule.ImportReference(typeof(int));
+            VariableDefinition bitOffsetVar = new VariableDefinition(intType);
+            method.Body.Variables.Add(bitOffsetVar);
+            int bitOffsetVarIndex = method.Body.Variables.Count - 1;
+
+            // Generate IL for: byte currentByte = 0;
+            worker.Emit(OpCodes.Ldc_I4_0);
+            worker.Emit(OpCodes.Stloc, currentByteVarIndex);
+
+            // Generate IL for: int bitOffset = 0;
+            worker.Emit(OpCodes.Ldc_I4_0);
+            worker.Emit(OpCodes.Stloc, bitOffsetVarIndex);
+
+            /// Above code generates IL equivalent of: 
+            //byte currentByte = 0;
+            //int bitOffset = 0;
 
             foreach (FieldDefinition field in variable.FindAllPublicFields())
             {
                 string typeName;
                 if (field.FieldType.Resolve().IsEnum)
                 {
-                    // Get underlying type name for enums
                     typeName = field.FieldType.Resolve().GetEnumUnderlyingType().FullName;
                 }
                 else
@@ -342,27 +364,29 @@ namespace Mirror.Weaver
                         throw new NotSupportedException($"Field type '{typeName}' is not currently supported for bit-packing serialization");
                 }
             }
+
+            // TODO:
+            // ILCode for:
+            // if(currentByte != 0) writer.Write(currentByte)
             return true; 
         }
 
-        void WriteBitpackedBool(bool value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        void WriteBitpackedBool(NetworkWriter writer, bool value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
         {
-            BitpackingHelpers.WritePartialByte(1, value ? (byte)1 : (byte)0, ref bitOffset, ref bytes);
+            BitpackingHelpers.WritePartialByte(writer, 1, value ? (byte)1 : (byte)0, ref bitOffset, ref currentByte);
         }
-        void WriteBitpackedUnsignedIntegerType(ulong value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        void WriteBitpackedUnsignedIntegerType(NetworkWriter writer, ulong value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
         {
             BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
             format.Signed = false;
-            BitpackingHelpers.WriteIntegerHelper((long)value, format, ref bitOffset, ref bytes);
+            BitpackingHelpers.WriteIntegerHelper(writer, (long)value, format, ref bitOffset, ref currentByte);
         }
-        void WriteBitpackedIntegerType(long value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        void WriteBitpackedIntegerType(NetworkWriter writer, long value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
         {
             BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
-            BitpackingHelpers.WriteIntegerHelper(value, format, ref bitOffset, ref bytes);
+            BitpackingHelpers.WriteIntegerHelper(writer, value, format, ref bitOffset, ref currentByte);
         }
-
-
-        void WriteBitpackedDecimalType(double value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        void WriteBitpackedDecimalType(NetworkWriter writer, double value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
         {
             BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(field);
             // TODO. Decimal helper. this one is gonna be more complicated
@@ -373,7 +397,6 @@ namespace Mirror.Weaver
 
         MethodDefinition GenerateCollectionWriter(TypeReference variable, TypeReference elementType, string writerFunction, ref bool WeavingFailed)
         {
-
             MethodDefinition writerFunc = GenerateWriterFunc(variable);
 
             MethodReference elementWriteFunc = GetWriteFunc(elementType, ref WeavingFailed);

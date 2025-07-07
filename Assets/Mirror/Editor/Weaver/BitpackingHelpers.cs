@@ -132,24 +132,24 @@ namespace Mirror.Weaver
             return System.Math.Log(x) / System.Math.Log(2.0f);
         }
 
-        public static void WriteIntegerHelper(long value, IntegerFormatInfo format, ref int bitOffset, ref List<byte> bytes)
+        public static void WriteIntegerHelper(NetworkWriter writer, long value, IntegerFormatInfo format, ref int bitOffset, ref byte currentByte)
         {
             int bitsToWrite = format.Bits;
             int remainderBits = bitsToWrite % 8;
             if (remainderBits != 0)
             {
-                WritePartialByte(remainderBits, (byte)(value >> (bitsToWrite - remainderBits)), ref bitOffset, ref bytes);
+                WritePartialByte(writer, remainderBits, (byte)(value >> (bitsToWrite - remainderBits)), ref bitOffset, ref currentByte);
                 bitsToWrite -= remainderBits;
             }
             while (bitsToWrite > 0)
             {
-                WritePartialByte(8, (byte)(value >> (bitsToWrite - 8)), ref bitOffset, ref bytes);
+                WritePartialByte(writer, 8, (byte)(value >> (bitsToWrite - 8)), ref bitOffset, ref currentByte);
                 bitsToWrite -= 8;
             }
         }
 
         // writes right-most (least significant bits) BITS from VALUE into BYTES
-        public static void WritePartialByte(int bits, byte value, ref int bitOffset, ref List<byte> bytes)
+        public static void WritePartialByte(NetworkWriter writer, int bits, byte value, ref int bitOffset, ref byte currentByte)
         {
             if (bits <= 0 || bits > 8)
                 throw new ArgumentException("bits must be between 1 and 8");
@@ -157,25 +157,23 @@ namespace Mirror.Weaver
             // keep the right-most bits
             value = (byte)(value << (8 - bits));
 
-            int startByteIndex = bitOffset / 8;
-            int endByteIndex = (bitOffset + bits - 1) / 8;
             int bitPos = bitOffset % 8;
-
-            // Ensure we have enough bytes in the list
-            if (bytes.Count - 1 < endByteIndex)
-                bytes.Add(0);
 
             int freeBitsInCurrentByte = 8 - bitPos;
 
             // Shift the bits to the correct position within the byte
             byte firstPart = (byte)(value >> bitPos);
-            bytes[startByteIndex] |= firstPart;
+            currentByte |= firstPart;
 
             if (bits > freeBitsInCurrentByte)
             {
+                // flush the current byte
+                writer.Write(currentByte);
+                currentByte = 0;
+
                 // Write remainder to next byte (least significant bits)
                 byte secondPart = (byte)(value << freeBitsInCurrentByte);
-                bytes[startByteIndex + 1] |= secondPart;
+                currentByte |= secondPart;
             }
 
             bitOffset += bits;
