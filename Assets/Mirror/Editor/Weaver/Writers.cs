@@ -346,6 +346,8 @@ namespace Mirror.Weaver
                     typeName = field.FieldType.FullName;
                 }
 
+                FieldReference fieldRef = assembly.MainModule.ImportReference(field);
+
                 switch (typeName)
                 {
                     case "System.Boolean":
@@ -367,22 +369,88 @@ namespace Mirror.Weaver
                         worker.Emit(OpCodes.Call, writePartialByteRef);
                         break;
 
+                    case "System.Byte":
                     case "System.SByte":
+                    case "System.UInt16":
                     case "System.Int16":
+                    case "System.UInt32":
                     case "System.Int32":
+                    case "System.UInt64":
                     case "System.Int64":
-                        BitpackingHelpers.IntegerFormatInfo format_signed = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
-                        weaverBitCounter += format_signed.Bits + (format_signed.Signed ? 1 : 0);
+                        BitpackingHelpers.IntegerFormatInfo integerFormat = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
+                        weaverBitCounter += integerFormat.Bits + (integerFormat.Signed ? 1 : 0);
+
+                        // Resolve the specific WriteIntegerHelper overload and get type info
+                        MethodReference writeIntegerHelperRef;
+                        int integerTypeBits;
+                        bool isSignedType;
+
+                        switch (typeName)
+                        {
+                            case "System.Byte":
+                                writeIntegerHelperRef = Resolvers.ResolveMethod(bitpackingHelpersType, assembly, Log,
+                                    "WriteIntegerHelper", ref WeavingFailed);
+                                integerTypeBits = 8;
+                                isSignedType = false;
+                                break;
+                            case "System.SByte":
+                                writeIntegerHelperRef = Resolvers.ResolveMethod(bitpackingHelpersType, assembly, Log,
+                                    "WriteIntegerHelper", ref WeavingFailed);
+                                integerTypeBits = 8;
+                                isSignedType = true;
+                                break;
+                            case "System.UInt16":
+                                writeIntegerHelperRef = Resolvers.ResolveMethod(bitpackingHelpersType, assembly, Log,
+                                    "WriteIntegerHelper", ref WeavingFailed);
+                                integerTypeBits = 16;
+                                isSignedType = false;
+                                break;
+                            case "System.Int16":
+                                writeIntegerHelperRef = Resolvers.ResolveMethod(bitpackingHelpersType, assembly, Log,
+                                    "WriteIntegerHelper", ref WeavingFailed);
+                                integerTypeBits = 16;
+                                isSignedType = true;
+                                break;
+                            case "System.UInt32":
+                                writeIntegerHelperRef = Resolvers.ResolveMethod(bitpackingHelpersType, assembly, Log,
+                                    "WriteIntegerHelper", ref WeavingFailed);
+                                integerTypeBits = 32;
+                                isSignedType = false;
+                                break;
+                            case "System.Int32":
+                                writeIntegerHelperRef = Resolvers.ResolveMethod(bitpackingHelpersType, assembly, Log,
+                                    "WriteIntegerHelper", ref WeavingFailed);
+                                integerTypeBits = 32;
+                                isSignedType = true;
+                                break;
+                            case "System.UInt64":
+                                writeIntegerHelperRef = Resolvers.ResolveMethod(bitpackingHelpersType, assembly, Log,
+                                    "WriteIntegerHelper", ref WeavingFailed);
+                                integerTypeBits = 64;
+                                isSignedType = false;
+                                break;
+                            case "System.Int64":
+                                writeIntegerHelperRef = Resolvers.ResolveMethod(bitpackingHelpersType, assembly, Log,
+                                    "WriteIntegerHelper", ref WeavingFailed);
+                                integerTypeBits = 64;
+                                isSignedType = true;
+                                break;
+                            default:
+                                throw new ArgumentException($"Unknown integer type: {typeName}");
+                        }
+
+                        // Generate IL: BitpackingHelpers.WriteIntegerHelper(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+                        worker.Emit(OpCodes.Ldarg_0);                          // Load writer
+                        worker.Emit(OpCodes.Ldarg_1);                          // Load struct
+                        worker.Emit(OpCodes.Ldfld, fieldRef);                  // Load field value
+                        worker.Emit(OpCodes.Ldc_I4, integerTypeBits);          // Load typeBits
+                        worker.Emit(isSignedType ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); // Load formatSigned
+                        worker.Emit(OpCodes.Ldc_I4, integerFormat.Bits);       // Load formatBits
+                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);        // Load address of bitOffset
+                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);      // Load address of currentByte
+                        worker.Emit(OpCodes.Call, writeIntegerHelperRef);      // Call helper
                         break;
 
-                    case "System.Byte":
-                    case "System.UInt16":
-                    case "System.UInt32":
-                    case "System.UInt64":
-                        BitpackingHelpers.IntegerFormatInfo format_usigned = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
-                        format_usigned.Signed = false;
-                        weaverBitCounter += format_usigned.Bits;
-                        break;
 
                     case "System.Single": 
                     case "System.Double":

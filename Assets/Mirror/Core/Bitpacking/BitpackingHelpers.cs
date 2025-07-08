@@ -34,10 +34,40 @@ namespace Mirror.Core
             return System.Math.Log(x) / System.Math.Log(2.0f);
         }
 
-        public static void WriteIntegerHelper(NetworkWriter writer, long value, IntegerFormatInfo format, ref int bitOffset, ref byte currentByte)
+
+
+        // Taking in basic format info instead of struct to make the ILcode generation a bit simpler.
+        public static void WriteIntegerHelper(NetworkWriter writer, byte value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+            => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+
+        public static void WriteIntegerHelper(NetworkWriter writer, sbyte value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+            => WriteIntegerHelperCore(writer, unchecked((ulong)(long)value), typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+
+        public static void WriteIntegerHelper(NetworkWriter writer, ushort value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+            => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+
+        public static void WriteIntegerHelper(NetworkWriter writer, short value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+            => WriteIntegerHelperCore(writer, unchecked((ulong)(long)value), typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+
+        public static void WriteIntegerHelper(NetworkWriter writer, uint value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+            => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+
+        public static void WriteIntegerHelper(NetworkWriter writer, int value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+            => WriteIntegerHelperCore(writer, unchecked((ulong)(long)value), typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+
+        public static void WriteIntegerHelper(NetworkWriter writer, ulong value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+            => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+
+        public static void WriteIntegerHelper(NetworkWriter writer, long value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+            => WriteIntegerHelperCore(writer, unchecked((ulong)value), typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+        private static void WriteIntegerHelperCore(NetworkWriter writer, ulong value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
         {
-            int bitsToWrite = format.Bits;
+            int bitsToWrite = formatBits;
             int remainderBits = bitsToWrite % 8;
+            if (formatSigned)
+            {
+                WritePartialByte(writer, 1, (byte)(value >> (typeBits - 1)), ref bitOffset, ref currentByte);
+            }
             if (remainderBits != 0)
             {
                 WritePartialByte(writer, remainderBits, (byte)(value >> (bitsToWrite - remainderBits)), ref bitOffset, ref currentByte);
@@ -49,6 +79,16 @@ namespace Mirror.Core
                 bitsToWrite -= 8;
             }
         }
+
+        private static ulong ReadIntegerHelperCore(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
+        {
+            int bitsToRead = formatBits;
+
+            // TODO. using readPartialByte I think. 
+            ulong result;
+            return result;
+        }
+
 
         public static void WriteDoubleHelper(NetworkWriter writer, double value, DecimalFormatInfo format, ref int bitOffset, ref byte currentByte)
         {

@@ -372,7 +372,21 @@ namespace Mirror.Weaver
                         worker.Emit(OpCodes.Stfld, fieldRef);
                         break;
 
-                    // Add cases for other types (integers, floats) as needed
+                    case "System.Byte":
+                    case "System.SByte":
+                    case "System.UInt16":
+                    case "System.Int16":
+                    case "System.UInt32":
+                    case "System.Int32":
+                    case "System.UInt64":
+                    case "System.Int64":
+                        //todo
+                        break;
+
+                    case "System.Single":
+                    case "System.Double":
+                        //todo
+
                     default:
                         WeavingFailed = true;
                         throw new NotSupportedException($"Field type '{typeName}' is not currently supported for bit-packing deserialization");
