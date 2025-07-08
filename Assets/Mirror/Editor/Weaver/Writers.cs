@@ -7,6 +7,7 @@ using Mono.CecilX.Cil;
 // otherwise we get an unknown import exception.
 using Mono.CecilX.Rocks;
 using System.Linq;
+using Mirror.Core;
 
 namespace Mirror.Weaver
 {
@@ -235,7 +236,7 @@ namespace Mirror.Weaver
 
             ILProcessor worker = writerFunc.Body.GetILProcessor();
 
-            bool isBitpackedStruct = BitpackingHelpers.HasBitpackedAttribute(variable);
+            bool isBitpackedStruct = BitpackingFormatHelpers.HasBitpackedAttribute(variable);
             if (isBitpackedStruct)
             {
                 if (!WriteAllFieldsBitpacked(variable, worker, ref WeavingFailed))
@@ -333,7 +334,6 @@ namespace Mirror.Weaver
             MethodReference writePartialByteRef = Resolvers.ResolveMethod(
                 bitpackingHelpersType, assembly, Log, "WritePartialByte", ref WeavingFailed);
 
-
             foreach (FieldDefinition field in variable.FindAllPublicFields())
             {
                 string typeName;
@@ -371,7 +371,7 @@ namespace Mirror.Weaver
                     case "System.Int16":
                     case "System.Int32":
                     case "System.Int64":
-                        BitpackingHelpers.IntegerFormatInfo format_signed = BitpackingHelpers.GetIntegerBitPackedFormat(field);
+                        BitpackingHelpers.IntegerFormatInfo format_signed = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
                         weaverBitCounter += format_signed.Bits + (format_signed.Signed ? 1 : 0);
                         break;
 
@@ -379,14 +379,14 @@ namespace Mirror.Weaver
                     case "System.UInt16":
                     case "System.UInt32":
                     case "System.UInt64":
-                        BitpackingHelpers.IntegerFormatInfo format_usigned = BitpackingHelpers.GetIntegerBitPackedFormat(field);
+                        BitpackingHelpers.IntegerFormatInfo format_usigned = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
                         format_usigned.Signed = false;
                         weaverBitCounter += format_usigned.Bits;
                         break;
 
                     case "System.Single": 
                     case "System.Double":
-                        BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(field);
+                        BitpackingHelpers.DecimalFormatInfo format = BitpackingFormatHelpers.GetDecimalFormatInfo(field);
                         weaverBitCounter += format.ExponentBits + format.MantissaBits + (format.Signed ? 1 : 0);
                         break;
 
@@ -407,31 +407,32 @@ namespace Mirror.Weaver
             return true; 
         }
 
-        static void WriteBitpackedBoolIL(NetworkWriter writer, bool value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
+        /*
+        void WriteBitpackedBoolIL(NetworkWriter writer, bool value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
         {
             BitpackingHelpers.WritePartialByte(writer, 1, value ? (byte)1 : (byte)0, ref bitOffset, ref currentByte);
         }
-        static void WriteBitpackedUnsignedIntegerType(NetworkWriter writer, ulong value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
+        void WriteBitpackedUnsignedIntegerType(NetworkWriter writer, ulong value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
         {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
+            BitpackingHelpers.IntegerFormatInfo format = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
             format.Signed = false;
             BitpackingHelpers.WriteIntegerHelper(writer, (long)value, format, ref bitOffset, ref currentByte);
         }
-        static void WriteBitpackedIntegerType(NetworkWriter writer, long value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
+        void WriteBitpackedIntegerType(NetworkWriter writer, long value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
         {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingHelpers.GetIntegerBitPackedFormat(field);
+            BitpackingHelpers.IntegerFormatInfo format = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
             BitpackingHelpers.WriteIntegerHelper(writer, value, format, ref bitOffset, ref currentByte);
         }
 
-        static void WriteBitpackedFloatType(NetworkWriter writer, float value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        void WriteBitpackedFloatType(NetworkWriter writer, float value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
         {
-            BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(field);
+            BitpackingHelpers.DecimalFormatInfo format = BitpackingFormatHelpers.GetDecimalFormatInfo(field);
         }
-        static void WriteBitpackedDoubleType(NetworkWriter writer, double value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
+        void WriteBitpackedDoubleType(NetworkWriter writer, double value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
         {
-            BitpackingHelpers.DecimalFormatInfo format = BitpackingHelpers.GetDecimalFormatInfo(field);
+            BitpackingHelpers.DecimalFormatInfo format = BitpackingFormatHelpers.GetDecimalFormatInfo(field);
         }
-
+        */
 
 
 

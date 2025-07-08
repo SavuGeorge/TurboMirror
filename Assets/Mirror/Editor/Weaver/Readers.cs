@@ -6,6 +6,7 @@ using Mono.CecilX.Cil;
 // Unity.Mirror.CodeGen assembly definition file in the Editor, and add CecilX.Rocks.
 // otherwise we get an unknown import exception.
 using Mono.CecilX.Rocks;
+using Mirror.Core;
 
 namespace Mirror.Weaver
 {
@@ -288,11 +289,98 @@ namespace Mirror.Weaver
                 GenerateNullCheck(worker, ref WeavingFailed);
 
             CreateNew(variable, worker, td, ref WeavingFailed);
-            ReadAllFields(variable, worker, ref WeavingFailed);
+
+            bool isBitpackedStruct = BitpackingFormatHelpers.HasBitpackedAttribute(variable);
+            if (isBitpackedStruct)
+            {
+                if (!ReadAllFieldsBitpacked(variable, worker, ref WeavingFailed))
+                    return null;
+            }
+            else
+            {
+                ReadAllFields(variable, worker, ref WeavingFailed);
+            }
+
 
             worker.Emit(OpCodes.Ldloc_0);
             worker.Emit(OpCodes.Ret);
             return readerFunc;
+        }
+
+
+        bool ReadAllFieldsBitpacked(TypeReference variable, ILProcessor worker, ref bool WeavingFailed)
+        {
+            int weaverBitCounter = 0; // Track total bits to know if we need final byte read
+
+            MethodDefinition method = worker.Body.Method;
+
+            // Add local variable for byte currentByte
+            TypeReference byteType = assembly.MainModule.ImportReference(typeof(byte));
+            VariableDefinition currentByteVar = new VariableDefinition(byteType);
+            method.Body.Variables.Add(currentByteVar);
+            int currentByteVarIndex = method.Body.Variables.Count - 1;
+
+            // Add local variable for int bitOffset  
+            TypeReference intType = assembly.MainModule.ImportReference(typeof(int));
+            VariableDefinition bitOffsetVar = new VariableDefinition(intType);
+            method.Body.Variables.Add(bitOffsetVar);
+            int bitOffsetVarIndex = method.Body.Variables.Count - 1;
+
+            // Initialize: byte currentByte = 0; int bitOffset = 0;
+            worker.Emit(OpCodes.Ldc_I4_0);
+            worker.Emit(OpCodes.Stloc, currentByteVarIndex);
+            worker.Emit(OpCodes.Ldc_I4_0);
+            worker.Emit(OpCodes.Stloc, bitOffsetVarIndex);
+
+            TypeReference bitpackingHelpersType = assembly.MainModule.ImportReference(typeof(BitpackingHelpers));
+            MethodReference readPartialByteRef = Resolvers.ResolveMethod(
+                bitpackingHelpersType, assembly, Log, "ReadPartialByte", ref WeavingFailed);
+
+            foreach (FieldDefinition field in variable.FindAllPublicFields())
+            {
+                string typeName;
+                if (field.FieldType.Resolve().IsEnum)
+                {
+                    typeName = field.FieldType.Resolve().GetEnumUnderlyingType().FullName;
+                }
+                else
+                {
+                    typeName = field.FieldType.FullName;
+                }
+
+                switch (typeName)
+                {
+                    case "System.Boolean":
+                        weaverBitCounter += 1;
+
+                        // Load the struct (address for value types, instance for reference types)
+                        OpCode loadOpCode = variable.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc;
+                        worker.Emit(loadOpCode, 0);
+
+                        // Call: BitpackingHelpers.ReadPartialByte(reader, 1, ref bitOffset, ref currentByte)
+                        worker.Emit(OpCodes.Ldarg_0);  // Load reader
+                        worker.Emit(OpCodes.Ldc_I4_1); // Load 1 (bits to read)
+                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);    // Load address of bitOffset
+                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);  // Load address of currentByte
+                        worker.Emit(OpCodes.Call, readPartialByteRef);
+
+                        // Convert byte result to bool and store in field
+                        worker.Emit(OpCodes.Ldc_I4_0);
+                        worker.Emit(OpCodes.Cgt_Un); // Convert to bool (1 becomes true, 0 becomes false)
+
+                        FieldReference fieldRef = assembly.MainModule.ImportReference(field);
+                        worker.Emit(OpCodes.Stfld, fieldRef);
+                        break;
+
+                    // Add cases for other types (integers, floats) as needed
+                    default:
+                        WeavingFailed = true;
+                        throw new NotSupportedException($"Field type '{typeName}' is not currently supported for bit-packing deserialization");
+                }
+            }
+
+            return true;
+
         }
 
         void GenerateNullCheck(ILProcessor worker, ref bool WeavingFailed)
