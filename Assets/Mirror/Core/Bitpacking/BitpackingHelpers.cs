@@ -35,30 +35,28 @@ namespace Mirror.Core
         }
 
 
+        public static void WriteIntegerHelperByte(NetworkWriter writer, byte value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+    => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
 
-        // Taking in basic format info instead of struct to make the ILcode generation a bit simpler.
-        public static void WriteIntegerHelper(NetworkWriter writer, byte value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
-            => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
-
-        public static void WriteIntegerHelper(NetworkWriter writer, sbyte value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteIntegerHelperSByte(NetworkWriter writer, sbyte value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
             => WriteIntegerHelperCore(writer, unchecked((ulong)(long)value), typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
 
-        public static void WriteIntegerHelper(NetworkWriter writer, ushort value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteIntegerHelperUShort(NetworkWriter writer, ushort value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
             => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
 
-        public static void WriteIntegerHelper(NetworkWriter writer, short value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteIntegerHelperShort(NetworkWriter writer, short value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
             => WriteIntegerHelperCore(writer, unchecked((ulong)(long)value), typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
 
-        public static void WriteIntegerHelper(NetworkWriter writer, uint value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteIntegerHelperUInt(NetworkWriter writer, uint value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
             => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
 
-        public static void WriteIntegerHelper(NetworkWriter writer, int value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteIntegerHelperInt(NetworkWriter writer, int value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
             => WriteIntegerHelperCore(writer, unchecked((ulong)(long)value), typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
 
-        public static void WriteIntegerHelper(NetworkWriter writer, ulong value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteIntegerHelperULong(NetworkWriter writer, ulong value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
             => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
 
-        public static void WriteIntegerHelper(NetworkWriter writer, long value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteIntegerHelperLong(NetworkWriter writer, long value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
             => WriteIntegerHelperCore(writer, unchecked((ulong)value), typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
         private static void WriteIntegerHelperCore(NetworkWriter writer, ulong value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
         {
@@ -80,12 +78,52 @@ namespace Mirror.Core
             }
         }
 
+        public static byte ReadIntegerHelperByte(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
+    => (byte)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte);
+
+        public static sbyte ReadIntegerHelperSByte(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
+            => unchecked((sbyte)(long)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte));
+
+        public static ushort ReadIntegerHelperUShort(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
+            => (ushort)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte);
+
+        public static short ReadIntegerHelperShort(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
+            => unchecked((short)(long)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte));
+
+        public static uint ReadIntegerHelperUInt(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
+            => (uint)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte);
+
+        public static int ReadIntegerHelperInt(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
+            => unchecked((int)(long)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte));
+
+        public static ulong ReadIntegerHelperULong(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
+            => ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte);
+
+        public static long ReadIntegerHelperLong(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
+            => unchecked((long)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte));
         private static ulong ReadIntegerHelperCore(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
         {
+            ulong result = 0;
             int bitsToRead = formatBits;
+            int remainderBits = bitsToRead % 8;
 
-            // TODO. using readPartialByte I think. 
-            ulong result;
+            if (formatSigned)
+            {
+                result = ReadPartialByte(reader, 1, ref bitOffset, ref currentByte);
+                result = result << (typeBits - bitsToRead);
+            }
+            if(remainderBits != 0)
+            {
+                result = result | ReadPartialByte(reader, remainderBits, ref bitOffset, ref currentByte);
+                bitsToRead -= remainderBits;
+            }
+            while(bitsToRead > 0)
+            {
+                result = result << 8;
+                result = result | ReadPartialByte(reader, 8, ref bitOffset, ref currentByte);
+                bitsToRead -= 8;
+            }
+
             return result;
         }
 

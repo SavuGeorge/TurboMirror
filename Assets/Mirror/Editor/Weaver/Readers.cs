@@ -354,8 +354,7 @@ namespace Mirror.Weaver
                         weaverBitCounter += 1;
 
                         // Load the struct (address for value types, instance for reference types)
-                        OpCode loadOpCode = variable.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc;
-                        worker.Emit(loadOpCode, 0);
+                        worker.Emit(variable.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc, 0);
 
                         // Call: BitpackingHelpers.ReadPartialByte(reader, 1, ref bitOffset, ref currentByte)
                         worker.Emit(OpCodes.Ldarg_0);  // Load reader
@@ -368,8 +367,7 @@ namespace Mirror.Weaver
                         worker.Emit(OpCodes.Ldc_I4_0);
                         worker.Emit(OpCodes.Cgt_Un); // Convert to bool (1 becomes true, 0 becomes false)
 
-                        FieldReference fieldRef = assembly.MainModule.ImportReference(field);
-                        worker.Emit(OpCodes.Stfld, fieldRef);
+                        worker.Emit(OpCodes.Stfld, assembly.MainModule.ImportReference(field));
                         break;
 
                     case "System.Byte":
@@ -380,8 +378,83 @@ namespace Mirror.Weaver
                     case "System.Int32":
                     case "System.UInt64":
                     case "System.Int64":
-                        //todo
+                        BitpackingHelpers.IntegerFormatInfo formatInfo = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
+                        bool formatSigned = formatInfo.Signed;
+                        int formatBits = formatInfo.Bits;
+
+                        // Determine type bits and helper method name
+                        int integerTypeBits;
+                        string helperMethodName;
+                        bool isSignedType;
+
+                        switch (typeName)
+                        {
+                            case "System.Byte":
+                                helperMethodName = "ReadIntegerHelperByte";
+                                integerTypeBits = 8;
+                                isSignedType = false;
+                                break;
+                            case "System.SByte":
+                                helperMethodName = "ReadIntegerHelperSByte";
+                                integerTypeBits = 8;
+                                isSignedType = true;
+                                break;
+                            case "System.UInt16":
+                                helperMethodName = "ReadIntegerHelperUShort";
+                                integerTypeBits = 16;
+                                isSignedType = false;
+                                break;
+                            case "System.Int16":
+                                helperMethodName = "ReadIntegerHelperShort";
+                                integerTypeBits = 16;
+                                isSignedType = true;
+                                break;
+                            case "System.UInt32":
+                                helperMethodName = "ReadIntegerHelperUInt";
+                                integerTypeBits = 32;
+                                isSignedType = false;
+                                break;
+                            case "System.Int32":
+                                helperMethodName = "ReadIntegerHelperInt";
+                                integerTypeBits = 32;
+                                isSignedType = true;
+                                break;
+                            case "System.UInt64":
+                                helperMethodName = "ReadIntegerHelperULong";
+                                integerTypeBits = 64;
+                                isSignedType = false;
+                                break;
+                            case "System.Int64":
+                                helperMethodName = "ReadIntegerHelperLong";
+                                integerTypeBits = 64;
+                                isSignedType = true;
+                                break;
+                            default:
+                                throw new ArgumentException($"Unknown integer type: {typeName}");
+                        }
+
+                        // Resolve the helper method
+                        MethodReference readIntegerHelperRef = Resolvers.ResolveMethod(
+                            bitpackingHelpersType, assembly, Log, helperMethodName, ref WeavingFailed);
+
+                        weaverBitCounter += formatBits;
+
+                        // Load the struct (address for value types, instance for reference types)
+                        worker.Emit(variable.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc, 0);
+
+                        // Call: BitpackingHelpers.ReadIntegerHelper[Type](reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte)
+                        worker.Emit(OpCodes.Ldarg_0);  // Load reader
+                        worker.Emit((formatSigned && isSignedType) ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); // Load formatSigned
+                        worker.Emit(OpCodes.Ldc_I4, formatBits); // Load formatBits  
+                        worker.Emit(OpCodes.Ldc_I4, integerTypeBits); // Load typeBits
+                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);    // Load address of bitOffset
+                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);  // Load address of currentByte
+                        worker.Emit(OpCodes.Call, readIntegerHelperRef);
+
+                        // Store result in field
+                        worker.Emit(OpCodes.Stfld, assembly.MainModule.ImportReference(field));
                         break;
+
 
                     case "System.Single":
                     case "System.Double":
