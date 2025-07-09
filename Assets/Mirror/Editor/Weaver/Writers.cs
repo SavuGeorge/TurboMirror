@@ -453,11 +453,30 @@ namespace Mirror.Weaver
                         break;
 
 
-                    case "System.Single": 
+                    case "System.Single":
                     case "System.Double":
-                        BitpackingHelpers.DecimalFormatInfo format = BitpackingFormatHelpers.GetDecimalFormatInfo(field);
-                        weaverBitCounter += format.ExponentBits + format.MantissaBits + (format.Signed ? 1 : 0);
+                        string helperMethodName = typeName == "System.Single" ? "WriteFloatHelper" : "WriteDoubleHelper";
+
+                        BitpackingHelpers.DecimalFormatInfo decimalFormat = BitpackingFormatHelpers.GetDecimalFormatInfo(field);
+                        weaverBitCounter += decimalFormat.ExponentBits + decimalFormat.MantissaBits + (decimalFormat.Signed ? 1 : 0);
+
+                        // Resolve the helper method
+                        MethodReference writeHelperRef = Resolvers.ResolveMethod(
+                            bitpackingHelpersType, assembly, Log, helperMethodName, ref WeavingFailed);
+
+                        // Generate IL: BitpackingHelpers.WriteXXXHelper(writer, value, formatSigned, exponentBits, biasExponent, mantissaBits, ref bitOffset, ref currentByte);
+                        worker.Emit(OpCodes.Ldarg_0);                                 // Load writer
+                        worker.Emit(OpCodes.Ldarg_1);                                 // Load struct
+                        worker.Emit(OpCodes.Ldfld, fieldRef);                         // Load field value
+                        worker.Emit(decimalFormat.Signed ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); // Load formatSigned
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.ExponentBits);      // Load exponentBits
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.BiasExponent);      // Load biasExponent
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.MantissaBits);      // Load mantissaBits
+                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);               // Load address of bitOffset
+                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);             // Load address of currentByte
+                        worker.Emit(OpCodes.Call, writeHelperRef);                    // Call helper
                         break;
+
 
                     default:
                         WeavingFailed = true;

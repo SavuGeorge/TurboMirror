@@ -458,7 +458,31 @@ namespace Mirror.Weaver
 
                     case "System.Single":
                     case "System.Double":
-                        //todo
+                        string readHelperMethodName = typeName == "System.Single" ? "ReadFloatHelper" : "ReadDoubleHelper";
+
+                        BitpackingHelpers.DecimalFormatInfo decimalFormat = BitpackingFormatHelpers.GetDecimalFormatInfo(field);
+                        weaverBitCounter += decimalFormat.ExponentBits + decimalFormat.MantissaBits + (decimalFormat.Signed ? 1 : 0);
+
+                        // Resolve the helper method
+                        MethodReference readHelperRef = Resolvers.ResolveMethod(
+                            bitpackingHelpersType, assembly, Log, readHelperMethodName, ref WeavingFailed);
+
+                        // Load the struct (address for value types, instance for reference types)
+                        worker.Emit(variable.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc, 0);
+
+                        // Call: BitpackingHelpers.ReadXXXHelper(reader, formatSigned, exponentBits, biasExponent, mantissaBits, ref bitOffset, ref currentByte)
+                        worker.Emit(OpCodes.Ldarg_0);                                 // Load reader
+                        worker.Emit(decimalFormat.Signed ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); // Load formatSigned
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.ExponentBits);      // Load exponentBits
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.BiasExponent);      // Load biasExponent
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.MantissaBits);      // Load mantissaBits
+                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);               // Load address of bitOffset
+                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);             // Load address of currentByte
+                        worker.Emit(OpCodes.Call, readHelperRef);                     // Call helper
+
+                        // Store result in field
+                        worker.Emit(OpCodes.Stfld, assembly.MainModule.ImportReference(field));
+                        break;
 
                     default:
                         WeavingFailed = true;

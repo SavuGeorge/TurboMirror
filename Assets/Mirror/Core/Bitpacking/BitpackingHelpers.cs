@@ -13,9 +13,9 @@ namespace Mirror.Core
         public struct DecimalFormatInfo
         {
             public bool Signed;
-            public ushort ExponentBits;
-            public short BiasExponent;
-            public ushort MantissaBits;
+            public int ExponentBits;
+            public int BiasExponent; // where: Bias = (2 ^ (2^BiasExponent - 1))
+            public int MantissaBits;
         }
 
         public static long FindNextPowerOf2Exponent(double x)
@@ -128,18 +128,209 @@ namespace Mirror.Core
         }
 
 
-        public static void WriteDoubleHelper(NetworkWriter writer, double value, DecimalFormatInfo format, ref int bitOffset, ref byte currentByte)
+        public static void WriteFloatHelper(NetworkWriter writer, float value, bool formatSigned, int exponentBits, int biasExponent, int mantissaBits, ref int bitOffset, ref byte currentByte)
         {
             // 32 - bit IEEE 754
-            // 1 sign bit, 8 exponent bits, 23 mantissa bits
+            // 1 sign bit, 8 exponent bits, 23 mantissa bits, 127 bias (2^7 - 1)
+            int valuebits = BitConverter.SingleToInt32Bits(value);
 
+            // signbit
+            if (formatSigned)
+            {
+                WritePartialByte(writer, 1, (byte)(valuebits >> 31), ref bitOffset, ref currentByte);
+            }
+
+            // exponent
+            // the generated formats use custom bias by doing that we can lower the lower-end of our floating point precision, down to the user-specified precision.
+            // based on the difference from that custom bias to the format's bias, we can calculate how many bits we can discard from the exponent.
+            // basically, the right-most bits we discard here are used to represent values below the user-specified precision, so we don't need them
+            int discardedExponentBits = 7 - biasExponent;
+            if (exponentBits + discardedExponentBits <= 8)
+            {
+                throw new ArgumentException($"Exponent bits ({exponentBits + discardedExponentBits}) exceed IEEE 754 double precision limit (11)");
+            }
+            WritePartialByte(writer, exponentBits, (byte)(valuebits >> (23 + discardedExponentBits)), ref bitOffset, ref currentByte);
+
+
+            // mantissa
+            int mantissaBitsToWrite = mantissaBits;
+            int mantissaRemainderBits = mantissaBits % 8;
+            if(mantissaRemainderBits != 0)
+            {
+                WritePartialByte(writer, mantissaRemainderBits, (byte)(valuebits >> (23 - mantissaRemainderBits)), ref bitOffset, ref currentByte);
+                mantissaBitsToWrite -= mantissaRemainderBits;
+            }
+            while(mantissaBitsToWrite > 0)
+            {
+                WritePartialByte(writer, 8, (byte)(valuebits >> (mantissaBitsToWrite - 8)), ref bitOffset, ref currentByte);
+                mantissaBitsToWrite -= 8;
+            }
         }
-        public static void WriteFloatHelper(NetworkWriter writer, float value, DecimalFormatInfo format, ref int bitOffset, ref byte currentByte)
+        public static float ReadFloatHelper(NetworkReader reader, bool formatSigned, int exponentBits, int biasExponent, int mantissaBits, ref int bitOffset, ref byte currentByte)
+        {
+            // 32 - bit IEEE 754
+            // 1 sign bit, 8 exponent bits, 23 mantissa bits, 127 bias (2^7 - 1)
+            // 1 | 1001 1001 | 101 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111
+            // 0 | 0000 0000 | 000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0001 1111 1111
+            // 0 | 0000 0000 | 000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
+            int result = 0;
+
+            // signbit
+            if (formatSigned)
+            {
+                result = ReadPartialByte(reader, 1, ref bitOffset, ref currentByte);
+            }
+
+            // exponent
+            byte exponent = ReadPartialByte(reader, exponentBits, ref bitOffset, ref currentByte);
+            int discardedExponentBits = 7 - biasExponent;
+            exponent = (byte)(exponent << discardedExponentBits);
+
+            result = result << 8;
+            result = result | exponent;
+
+            // mantissa
+            int mantissaBitsToRead = mantissaBits;
+            int mantissaRemainderBits = mantissaBits % 8;
+            if(mantissaRemainderBits > 0)
+            {
+                result = result << mantissaRemainderBits;
+                result = result | ReadPartialByte(reader, mantissaRemainderBits, ref bitOffset, ref currentByte);
+                mantissaBitsToRead -= mantissaRemainderBits;
+            }
+            while(mantissaBitsToRead > 0)
+            {
+                result = result << 8;
+                result = result | ReadPartialByte(reader, 8, ref bitOffset, ref currentByte);
+                mantissaBitsToRead -= 8;
+            }
+            result = result << 23 - mantissaBits;
+
+            return BitConverter.Int32BitsToSingle(result);
+        }
+
+        public static void WriteDoubleHelper(NetworkWriter writer, double value, bool formatSigned, int exponentBits, int biasExponent, int mantissaBits, ref int bitOffset, ref byte currentByte)
         {
             // 64-bit IEEE 754
-            // 1 sign bit, 11 exponent bits, 52 mantissa bits
+            // 1 sign bit, 11 exponent bits, 52 mantissa bits, 1023 bias (2^10 - 1)
+            // 1 | 1001 1001 101 | 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111 1111
+            // 0 | 0000 0000 000 | 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000 0000
+            long valuebits = BitConverter.DoubleToInt64Bits(value);
 
+            // signbit
+            if (formatSigned)
+            {
+                WritePartialByte(writer, 1, (byte)(valuebits >> 63), ref bitOffset, ref currentByte);
+            }
+
+            // exponent
+            // the generated formats use custom bias by doing that we can lower the lower-end of our floating point precision, down to the user-specified precision.
+            // based on the difference from that custom bias to the format's bias, we can calculate how many bits we can discard from the exponent.
+            // basically, the right-most bits we discard here are used to represent values below the user-specified precision, so we don't need them
+            int discardedExponentBits = 10 - biasExponent;
+            int exponentBitsToWrite = exponentBits;
+            int exponentRemainderBits = exponentBits % 8;
+
+            if (exponentBitsToWrite + discardedExponentBits > 11)
+            {
+                throw new ArgumentException($"Exponent bits ({exponentBitsToWrite + discardedExponentBits}) exceed IEEE 754 double precision limit (11)");
+            }
+
+            if (exponentRemainderBits != 0)
+            {
+                WritePartialByte(writer, exponentRemainderBits, (byte)(valuebits >> (52 + exponentBitsToWrite - exponentRemainderBits + discardedExponentBits)), ref bitOffset, ref currentByte);
+                exponentBitsToWrite -= exponentRemainderBits;
+            }
+            if(exponentBitsToWrite > 0)
+            {
+                WritePartialByte(writer, exponentBitsToWrite, (byte)(valuebits >> 52 + discardedExponentBits), ref bitOffset, ref currentByte);
+                // exponentBitsToWrite -= 8;
+            }
+
+            // mantissa
+            int mantissaBitsToWrite = mantissaBits;
+            int mantissaRemainderBits = mantissaBits % 8;
+            if (mantissaRemainderBits != 0)
+            {
+                WritePartialByte(writer, mantissaRemainderBits, (byte)(valuebits >> (52 - mantissaRemainderBits)), ref bitOffset, ref currentByte);
+                mantissaBitsToWrite -= mantissaRemainderBits;
+            }
+            while (mantissaBitsToWrite > 0)
+            {
+                WritePartialByte(writer, 8, (byte)(valuebits >> (mantissaBitsToWrite - 8)), ref bitOffset, ref currentByte);
+                mantissaBitsToWrite -= 8;
+            }
         }
+
+
+        public static double ReadDoubleHelper(NetworkReader reader, bool formatSigned, int exponentBits, int biasExponent, int mantissaBits, ref int bitOffset, ref byte currentByte)
+        {
+            // 64-bit IEEE 754
+            // 1 sign bit, 11 exponent bits, 52 mantissa bits, 1023 bias (2^10 - 1)
+            long result = 0;
+
+            // signbit
+            if (formatSigned)
+            {
+                result = ReadPartialByte(reader, 1, ref bitOffset, ref currentByte);
+                result = result << 63; // Move sign bit to the leftmost position
+            }
+
+            // exponent
+            int discardedExponentBits = 10 - biasExponent;
+            int exponentBitsToRead = exponentBits;
+            int exponentRemainderBits = exponentBits % 8;
+
+            long exponentResult = 0;
+
+            if (exponentRemainderBits != 0)
+            {
+                exponentResult = ReadPartialByte(reader, exponentRemainderBits, ref bitOffset, ref currentByte);
+                exponentBitsToRead -= exponentRemainderBits;
+            }
+
+            while (exponentBitsToRead > 0)
+            {
+                exponentResult = exponentResult << 8;
+                exponentResult = exponentResult | ReadPartialByte(reader, 8, ref bitOffset, ref currentByte);
+                exponentBitsToRead -= 8;
+            }
+
+            // Shift to account for discarded bits
+            exponentResult = exponentResult << discardedExponentBits;
+
+            // Position exponent correctly in the 64-bit representation
+            result = result | (exponentResult << 52);
+
+            // mantissa
+            int mantissaBitsToRead = mantissaBits;
+            int mantissaRemainderBits = mantissaBits % 8;
+
+            long mantissaResult = 0;
+
+            if (mantissaRemainderBits != 0)
+            {
+                mantissaResult = ReadPartialByte(reader, mantissaRemainderBits, ref bitOffset, ref currentByte);
+                mantissaBitsToRead -= mantissaRemainderBits;
+            }
+
+            while (mantissaBitsToRead > 0)
+            {
+                mantissaResult = mantissaResult << 8;
+                mantissaResult = mantissaResult | ReadPartialByte(reader, 8, ref bitOffset, ref currentByte);
+                mantissaBitsToRead -= 8;
+            }
+
+            // Shift mantissa to fill the remaining bits (52 - mantissaBits)
+            mantissaResult = mantissaResult << (52 - mantissaBits);
+
+            // Combine with result
+            result = result | mantissaResult;
+
+            return BitConverter.Int64BitsToDouble(result);
+        }
+
+
 
         // writes right-most (least significant bits) BITS from VALUE into BYTES
         public static void WritePartialByte(NetworkWriter writer, int bits, byte value, ref int bitOffset, ref byte currentByte)
