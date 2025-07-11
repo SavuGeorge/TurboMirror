@@ -460,7 +460,7 @@ namespace Mirror.Weaver
                     case "System.Double":
                         string readHelperMethodName = typeName == "System.Single" ? "ReadFloatHelper" : "ReadDoubleHelper";
 
-                        BitpackingHelpers.DecimalFormatInfo decimalFormat = BitpackingFormatHelpers.GetDecimalFormatInfo(field);
+                        BitpackingHelpers.DecimalFormatInfo decimalFormat = BitpackingFormatHelpers.GetDecimalFormatInfo(field, Log);
                         weaverBitCounter += decimalFormat.ExponentBits + decimalFormat.MantissaBits + (decimalFormat.Signed ? 1 : 0);
 
                         // Resolve the helper method
