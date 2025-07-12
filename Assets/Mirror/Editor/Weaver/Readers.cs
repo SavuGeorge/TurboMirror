@@ -458,9 +458,19 @@ namespace Mirror.Weaver
 
                     case "System.Single":
                     case "System.Double":
-                        string readHelperMethodName = typeName == "System.Single" ? "ReadFloatHelper" : "ReadDoubleHelper";
+                        string readHelperMethodName;
+                        BitpackingHelpers.DecimalFormatInfo decimalFormat;
+                        if (typeName == "System.Single")
+                        {
+                            readHelperMethodName = "ReadFloatHelper";
+                            decimalFormat = BitpackingFormatHelpers.GetFloatFormatInfo(field);
+                        }
+                        else // if(typeName == "System.Double")
+                        {
+                            readHelperMethodName = "ReadDoubleHelper";
+                            decimalFormat = BitpackingFormatHelpers.GetDoubleFormatInfo(field);
+                        }
 
-                        BitpackingHelpers.DecimalFormatInfo decimalFormat = BitpackingFormatHelpers.GetDecimalFormatInfo(field, Log);
                         weaverBitCounter += decimalFormat.ExponentBits + decimalFormat.MantissaBits + (decimalFormat.Signed ? 1 : 0);
 
                         // Resolve the helper method

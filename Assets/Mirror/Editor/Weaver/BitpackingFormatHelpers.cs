@@ -1,6 +1,7 @@
 using UnityEngine;
 using Mono.CecilX;
 using Mirror.Core;
+using System;
 
 namespace Mirror.Weaver
 {
@@ -60,7 +61,15 @@ namespace Mirror.Weaver
         }
 
 
-        public static BitpackingHelpers.DecimalFormatInfo GetDecimalFormatInfo(FieldDefinition field)
+        public static BitpackingHelpers.DecimalFormatInfo GetFloatFormatInfo(FieldDefinition field)
+        {
+            return GetDecimalFormatInfo(field, 7, 8, 23);
+        }
+        public static BitpackingHelpers.DecimalFormatInfo GetDoubleFormatInfo(FieldDefinition field)
+        {
+            return GetDecimalFormatInfo(field, 10, 11, 52);
+        }
+        static BitpackingHelpers.DecimalFormatInfo GetDecimalFormatInfo(FieldDefinition field, int typeBiasExponent, int typeExponentBits, int typeMantissaBits)
         {
             // === Get attributes
             double minValue = -double.MaxValue;
@@ -86,16 +95,20 @@ namespace Mirror.Weaver
             BitpackingHelpers.DecimalFormatInfo format = new BitpackingHelpers.DecimalFormatInfo();
             format.Signed = (minValue < 0);
 
+            // TODO: we usually don't actually even need the next power of two, since the full mantissa gets us most of the way to 2x at full precision, and still most of the way to 2x at even 3-4 bits
+            // should be able to figure out based on our precision if we can drop one more bit somehow. 
             long emax = BitpackingHelpers.FindNextPowerOf2Exponent(maxValue);
             long emin = BitpackingHelpers.FindPreviousPowerOf2Exponent(minPrecision);
+            format.BiasExponent = (short)Math.Min(typeBiasExponent, -emin + 1); // first things first, we try a lower bias. We probably don't need all the precision we would get from the standard bias
             Debug.Assert(emax >= emin);
 
-            format.BiasExponent = (short)emin;
-            format.ExponentBits = (ushort)(emax - emin);
+            format.ExponentBits = (ushort)(emax - emin - (typeBiasExponent - format.BiasExponent) + 1);
+            //format.ExponentBits = (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(exponentRange);
+            //format.ExponentBits = (ushort)(emax + format.BiasExponent);
 
             // As long as the mantissa is large enough to achieve our minimum precision for the highest exponent in value range, then it will also be enough for the lower exponent values.
             float HighestIntervalLength = Mathf.Pow(2, emax) - Mathf.Pow(2, emax - 1);
-            format.MantissaBits = (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(BitpackingHelpers.Log2(HighestIntervalLength) - BitpackingHelpers.Log2(minPrecision));
+            format.MantissaBits = (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(HighestIntervalLength / minPrecision);
 
             return format;
         }

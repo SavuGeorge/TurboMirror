@@ -455,10 +455,23 @@ namespace Mirror.Weaver
 
                     case "System.Single":
                     case "System.Double":
-                        string helperMethodName = typeName == "System.Single" ? "WriteFloatHelper" : "WriteDoubleHelper";
 
-                        BitpackingHelpers.DecimalFormatInfo decimalFormat = BitpackingFormatHelpers.GetDecimalFormatInfo(field, Log);
+                        string helperMethodName;
+                        BitpackingHelpers.DecimalFormatInfo decimalFormat;
+                        if (typeName == "System.Single")
+                        {
+                            helperMethodName = "WriteFloatHelper";
+                            decimalFormat = BitpackingFormatHelpers.GetFloatFormatInfo(field);
+                        }
+                        else // if(typeName == "System.Double")
+                        {
+                            helperMethodName = "WriteDoubleHelper";
+                            decimalFormat = BitpackingFormatHelpers.GetDoubleFormatInfo(field);
+                        }
+
                         weaverBitCounter += decimalFormat.ExponentBits + decimalFormat.MantissaBits + (decimalFormat.Signed ? 1 : 0);
+                        Log.Warning($"{decimalFormat.Signed}  {decimalFormat.ExponentBits} {decimalFormat.BiasExponent} {decimalFormat.MantissaBits}");
+
 
                         // Resolve the helper method
                         MethodReference writeHelperRef = Resolvers.ResolveMethod(
