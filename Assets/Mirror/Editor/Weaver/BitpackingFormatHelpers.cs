@@ -63,13 +63,13 @@ namespace Mirror.Weaver
 
         public static BitpackingHelpers.DecimalFormatInfo GetFloatFormatInfo(FieldDefinition field, Mirror.Weaver.Logger log)
         {
-            return GetDecimalFormatInfo(field, 7, 8, 23, log);
+            return GetDecimalFormatInfo(field, 127, 8, 23, log);
         }
         public static BitpackingHelpers.DecimalFormatInfo GetDoubleFormatInfo(FieldDefinition field, Mirror.Weaver.Logger log)
         {
-            return GetDecimalFormatInfo(field, 10, 11, 52, log);
+            return GetDecimalFormatInfo(field, 1023, 11, 52, log);
         }
-        static BitpackingHelpers.DecimalFormatInfo GetDecimalFormatInfo(FieldDefinition field, int typeBiasExponent, int typeExponentBits, int typeMantissaBits, Mirror.Weaver.Logger log)
+        static BitpackingHelpers.DecimalFormatInfo GetDecimalFormatInfo(FieldDefinition field, int typeBias, int typeExponentBits, int typeMantissaBits, Mirror.Weaver.Logger log)
         {
             // === Get attributes
             double minValue = -double.MaxValue;
@@ -106,8 +106,7 @@ namespace Mirror.Weaver
             // This is the number of bits we need to represent the exponent range down from lowest non-zero value up to highest value
             ushort bitsToRepresentRange = (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(emax - emin);
             format.ExponentBits = Math.Min(typeExponentBits, (ushort)bitsToRepresentRange);
-            format.NewBias = (int)(LongPow(2, typeBiasExponent) - 1) - (int)minPrecisionExponentValue + 1;
-
+            format.NewBias = typeBias - (int)minPrecisionExponentValue + 1;
 
             // As long as the mantissa is large enough to achieve our minimum precision for the highest exponent in value range, then it will also be enough for the lower exponent values.
             float HighestIntervalLength = Mathf.Pow(2, emax) - Mathf.Pow(2, emax - 1);
