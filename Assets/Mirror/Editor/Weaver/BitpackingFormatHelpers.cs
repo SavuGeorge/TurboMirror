@@ -94,7 +94,7 @@ namespace Mirror.Weaver
             // === Compute the format 
             BitpackingHelpers.DecimalFormatInfo format = new BitpackingHelpers.DecimalFormatInfo();
             format.Signed = (minValue < 0);
-
+            format.MinPrecision = minPrecision;
 
             long emax = BitpackingHelpers.FindNextPowerOf2Exponent(maxValue);
             long emin = BitpackingHelpers.FindPreviousPowerOf2Exponent(minPrecision);

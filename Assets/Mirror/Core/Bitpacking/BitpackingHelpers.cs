@@ -17,6 +17,7 @@ namespace Mirror.Core
             public int ExponentBits;
             public int NewBias; // where: Bias = (2 ^ (2^BiasExponent - 1))
             public int MantissaBits;
+            public double MinPrecision;
         }
 
         public static long FindNextPowerOf2Exponent(double x)
@@ -129,11 +130,11 @@ namespace Mirror.Core
         }
  
 
-        public static void WriteFloatHelper(NetworkWriter writer, float value, bool formatSigned, int exponentBits, int newBias, int mantissaBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteFloatHelper(NetworkWriter writer, float value, bool formatSigned, int exponentBits, int newBias, int mantissaBits, double minPrecision, ref int bitOffset, ref byte currentByte)
         {
             // 32-bit IEEE 754
             // 1 sign bit, 8 exponent bits, 23 mantissa bits, 127 bias (2^7 - 1)
-            int valuebits = BitConverter.SingleToInt32Bits(value);
+            int valuebits = BitConverter.SingleToInt32Bits(value - (value % (float)minPrecision));
 
             // Sign bit
             if (formatSigned)
@@ -208,11 +209,11 @@ namespace Mirror.Core
             return BitConverter.Int32BitsToSingle(reconstructedBits);
         }
 
-        public static void WriteDoubleHelper(NetworkWriter writer, double value, bool formatSigned, int exponentBits, int newBias, int mantissaBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteDoubleHelper(NetworkWriter writer, double value, bool formatSigned, int exponentBits, int newBias, int mantissaBits, double minPrecision, ref int bitOffset, ref byte currentByte)
         {
             // 64-bit IEEE 754
             // 1 sign bit, 11 exponent bits, 52 mantissa bits, 1023 bias (2^10 - 1)
-            long valuebits = BitConverter.DoubleToInt64Bits(value);
+            long valuebits = BitConverter.DoubleToInt64Bits(value - (value % minPrecision));
 
             // Sign bit
             if (formatSigned)
