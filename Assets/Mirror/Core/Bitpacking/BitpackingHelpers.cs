@@ -134,6 +134,7 @@ namespace Mirror.Core
             // 32 - bit IEEE 754
             // 1 sign bit, 8 exponent bits, 23 mantissa bits, 127 bias (2^7 - 1)
             int valuebits = BitConverter.SingleToInt32Bits(value);
+
             // signbit
             if (formatSigned)
             {
@@ -143,7 +144,15 @@ namespace Mirror.Core
             // exponent
             // the generated formats use custom bias by doing that we can lower the lower-end of our floating point precision, down to the user-specified precision.
             int oldExponent = (valuebits >> 23) & 0b011111111;
-            int newExponent = oldExponent - 127 + (int)Math.Pow(2, biasExponent) - 1;
+            int newExponent;
+            if (oldExponent == 0)
+            {
+                newExponent = 0;
+            }
+            else
+            {
+                newExponent = oldExponent - 127 + (int)Math.Pow(2, biasExponent) - 1;
+            }
             WritePartialByte(writer, exponentBits, (byte)(newExponent), ref bitOffset, ref currentByte);
 
             int mantissaBitsToWrite = mantissaBits;
@@ -162,7 +171,6 @@ namespace Mirror.Core
             }
         }
 
-
         public static float ReadFloatHelper(NetworkReader reader, bool formatSigned, int exponentBits, int biasExponent, int mantissaBits, ref int bitOffset, ref byte currentByte)
         {
             // 32 - bit IEEE 754
@@ -175,7 +183,16 @@ namespace Mirror.Core
             }
 
             int exponentReadValue = ReadPartialByte(reader, exponentBits, ref bitOffset, ref currentByte);
-            int exponentValue = exponentReadValue - (int)Math.Pow(2, biasExponent) + 127 + 1;
+            int exponentValue;
+            if (exponentReadValue == 0)
+            {
+                exponentValue = 0;
+            }
+            else
+            {
+                exponentValue = exponentReadValue - (int)Math.Pow(2, biasExponent) + 127 + 1;
+            }
+
             int mantissaBitsToRead = mantissaBits;
             int mantissaValue = 0;
             while (true)
@@ -212,7 +229,15 @@ namespace Mirror.Core
 
             // Exponent - following the same pattern as float
             int oldExponent = (int)((valuebits >> 52) & 0x7FF); // 11 bits
-            int newExponent = oldExponent - 1023 + (int)Math.Pow(2, biasExponent) - 1;
+            int newExponent;
+            if (oldExponent == 0)
+            {
+                newExponent = 0;
+            }
+            else
+            {
+                newExponent = oldExponent - 1023 + (int)Math.Pow(2, biasExponent) - 1;
+            }
 
             // Write exponent bits in chunks (max 8 bits at a time)
             int exponentBitsToWrite = exponentBits;
@@ -262,7 +287,15 @@ namespace Mirror.Core
                 exponentBitsToRead -= currentReadCount;
             }
 
-            int exponentValue = exponentReadValue - (int)Math.Pow(2, biasExponent) + 1023;
+            int exponentValue;
+            if (exponentReadValue == 0)
+            {
+                exponentValue = 0;
+            }
+            else
+            {
+                exponentValue = exponentReadValue - (int)Math.Pow(2, biasExponent) + 1023 + 1;
+            }
 
             // Mantissa
             int mantissaBitsToRead = mantissaBits;
