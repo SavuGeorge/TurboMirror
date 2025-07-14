@@ -208,7 +208,7 @@ namespace Mirror.Core
             return BitConverter.Int32BitsToSingle(reconstructedBits);
         }
 
-        public static void WriteDoubleHelper(NetworkWriter writer, double value, bool formatSigned, int exponentBits, int biasExponent, int mantissaBits, ref int bitOffset, ref byte currentByte)
+        public static void WriteDoubleHelper(NetworkWriter writer, double value, bool formatSigned, int exponentBits, int newBias, int mantissaBits, ref int bitOffset, ref byte currentByte)
         {
             // 64-bit IEEE 754
             // 1 sign bit, 11 exponent bits, 52 mantissa bits, 1023 bias (2^10 - 1)
@@ -220,7 +220,7 @@ namespace Mirror.Core
                 WritePartialByte(writer, 1, (byte)(valuebits >> 63), ref bitOffset, ref currentByte);
             }
 
-            // Exponent - following the same pattern as float
+            // Exponent - now using precalculated bias like float
             int oldExponent = (int)((valuebits >> 52) & 0x7FF); // 11 bits
             int newExponent;
             if (oldExponent == 0)
@@ -229,7 +229,7 @@ namespace Mirror.Core
             }
             else
             {
-                newExponent = oldExponent - 1023 + (int)Math.Pow(2, biasExponent) - 1;
+                newExponent = oldExponent - 1023 + newBias;
             }
 
             // Write exponent bits in chunks (max 8 bits at a time)
@@ -257,7 +257,7 @@ namespace Mirror.Core
             }
         }
 
-        public static double ReadDoubleHelper(NetworkReader reader, bool formatSigned, int exponentBits, int biasExponent, int mantissaBits, ref int bitOffset, ref byte currentByte)
+        public static double ReadDoubleHelper(NetworkReader reader, bool formatSigned, int exponentBits, int newBias, int mantissaBits, ref int bitOffset, ref byte currentByte)
         {
             // 64-bit IEEE 754
             // 1 sign bit, 11 exponent bits, 52 mantissa bits, 1023 bias (2^10 - 1)
@@ -287,7 +287,7 @@ namespace Mirror.Core
             }
             else
             {
-                exponentValue = exponentReadValue - (int)Math.Pow(2, biasExponent) + 1023 + 1;
+                exponentValue = exponentReadValue - newBias + 1023;
             }
 
             // Mantissa
