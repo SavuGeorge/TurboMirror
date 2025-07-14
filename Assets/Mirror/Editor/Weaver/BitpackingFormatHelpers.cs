@@ -61,15 +61,15 @@ namespace Mirror.Weaver
         }
 
 
-        public static BitpackingHelpers.DecimalFormatInfo GetFloatFormatInfo(FieldDefinition field)
+        public static BitpackingHelpers.DecimalFormatInfo GetFloatFormatInfo(FieldDefinition field, Mirror.Weaver.Logger log)
         {
-            return GetDecimalFormatInfo(field, 7, 8, 23);
+            return GetDecimalFormatInfo(field, 7, 8, 23, log);
         }
-        public static BitpackingHelpers.DecimalFormatInfo GetDoubleFormatInfo(FieldDefinition field)
+        public static BitpackingHelpers.DecimalFormatInfo GetDoubleFormatInfo(FieldDefinition field, Mirror.Weaver.Logger log)
         {
-            return GetDecimalFormatInfo(field, 10, 11, 52);
+            return GetDecimalFormatInfo(field, 10, 11, 52, log);
         }
-        static BitpackingHelpers.DecimalFormatInfo GetDecimalFormatInfo(FieldDefinition field, int typeBiasExponent, int typeExponentBits, int typeMantissaBits)
+        static BitpackingHelpers.DecimalFormatInfo GetDecimalFormatInfo(FieldDefinition field, int typeBiasExponent, int typeExponentBits, int typeMantissaBits, Mirror.Weaver.Logger log)
         {
             // === Get attributes
             double minValue = -double.MaxValue;
@@ -95,23 +95,41 @@ namespace Mirror.Weaver
             BitpackingHelpers.DecimalFormatInfo format = new BitpackingHelpers.DecimalFormatInfo();
             format.Signed = (minValue < 0);
 
-            // TODO: we usually don't actually even need the next power of two, since the full mantissa gets us most of the way to 2x at full precision, and still most of the way to 2x at even 3-4 bits
-            // should be able to figure out based on our precision if we can drop one more bit somehow. 
+
             long emax = BitpackingHelpers.FindNextPowerOf2Exponent(maxValue);
             long emin = BitpackingHelpers.FindPreviousPowerOf2Exponent(minPrecision);
-            format.BiasExponent = (short)Math.Min(typeBiasExponent, -emin + 1); // first things first, we try a lower bias. We probably don't need all the precision we would get from the standard bias
             Debug.Assert(emax >= emin);
 
-            format.ExponentBits = (ushort)(emax - emin - (typeBiasExponent - format.BiasExponent) + 1);
-            //format.ExponentBits = (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(exponentRange);
-            //format.ExponentBits = (ushort)(emax + format.BiasExponent);
+            // This is the value encoded in our exponent for the lowest non-zero value we have to encode. Our bias offset cannot be greater than this or our bias conversion will underflow. 
+            long minPrecisionExponentValue = (BitConverter.SingleToInt32Bits((float)minPrecision) >> typeMantissaBits) & (LongPow(2, typeExponentBits + 1) - 1); 
+
+            // This is the number of bits we need to represent the exponent range down from lowest non-zero value up to highest value
+            ushort bitsToRepresentRange = (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(emax - emin);
+            format.ExponentBits = Math.Min(typeExponentBits, (ushort)bitsToRepresentRange);
+            format.NewBias = (int)(LongPow(2, typeBiasExponent) - 1) - (int)minPrecisionExponentValue + 1;
+
 
             // As long as the mantissa is large enough to achieve our minimum precision for the highest exponent in value range, then it will also be enough for the lower exponent values.
             float HighestIntervalLength = Mathf.Pow(2, emax) - Mathf.Pow(2, emax - 1);
-            format.MantissaBits = (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(HighestIntervalLength / minPrecision);
+            format.MantissaBits = Math.Min(typeMantissaBits, (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(HighestIntervalLength / minPrecision));
 
             return format;
         }
+
+        public static long LongPow(long baseNum, long exp)
+        {
+            if (exp < 0) throw new ArgumentException("Negative exponents not supported");
+            if (exp == 0) return 1;
+
+            long result = 1;
+            for (int i = 0; i < exp; i++)
+            {
+                result *= baseNum;
+            }
+            return result;
+        }
+
+
     }
 
 }
