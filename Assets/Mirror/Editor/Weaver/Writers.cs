@@ -470,8 +470,7 @@ namespace Mirror.Weaver
                         }
 
                         weaverBitCounter += decimalFormat.ExponentBits + decimalFormat.MantissaBits + (decimalFormat.Signed ? 1 : 0);
-                        Log.Warning($"{decimalFormat.Signed}  {decimalFormat.ExponentBits} {decimalFormat.BiasExponent} {decimalFormat.MantissaBits}");
-
+                        Log.Warning($"{field.Name} {decimalFormat.Signed}  {decimalFormat.ExponentBits} {decimalFormat.BiasExponent} {decimalFormat.MantissaBits}");
 
                         // Resolve the helper method
                         MethodReference writeHelperRef = Resolvers.ResolveMethod(
@@ -483,7 +482,7 @@ namespace Mirror.Weaver
                         worker.Emit(OpCodes.Ldfld, fieldRef);                         // Load field value
                         worker.Emit(decimalFormat.Signed ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); // Load formatSigned
                         worker.Emit(OpCodes.Ldc_I4, decimalFormat.ExponentBits);      // Load exponentBits
-                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.BiasExponent);      // Load biasExponent
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.BiasExponent);        // Load biasOffset
                         worker.Emit(OpCodes.Ldc_I4, decimalFormat.MantissaBits);      // Load mantissaBits
                         worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);               // Load address of bitOffset
                         worker.Emit(OpCodes.Ldloca, currentByteVarIndex);             // Load address of currentByte

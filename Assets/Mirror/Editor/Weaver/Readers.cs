@@ -484,7 +484,7 @@ namespace Mirror.Weaver
                         worker.Emit(OpCodes.Ldarg_0);                                 // Load reader
                         worker.Emit(decimalFormat.Signed ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); // Load formatSigned
                         worker.Emit(OpCodes.Ldc_I4, decimalFormat.ExponentBits);      // Load exponentBits
-                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.BiasExponent);      // Load biasExponent
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.BiasExponent);        // Load biasOffset
                         worker.Emit(OpCodes.Ldc_I4, decimalFormat.MantissaBits);      // Load mantissaBits
                         worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);               // Load address of bitOffset
                         worker.Emit(OpCodes.Ldloca, currentByteVarIndex);             // Load address of currentByte
