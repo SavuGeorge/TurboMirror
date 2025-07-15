@@ -96,20 +96,22 @@ namespace Mirror.Weaver
             format.Signed = (minValue < 0);
             format.MinPrecision = minPrecision;
 
-            long emax = BitpackingHelpers.FindNextPowerOf2Exponent(maxValue);
-            long emin = BitpackingHelpers.FindPreviousPowerOf2Exponent(minPrecision);
-            Debug.Assert(emax >= emin);
+            long maxExponent = BitpackingHelpers.FindNextPowerOf2Exponent(maxValue);
+            long minExponent = BitpackingHelpers.FindPreviousPowerOf2Exponent(minPrecision);
+            Debug.Assert(maxExponent >= minExponent);
 
             // This is the value encoded in our exponent for the lowest non-zero value we have to encode. Our bias offset cannot be greater than this or our bias conversion will underflow. 
             long minPrecisionExponentValue = (BitConverter.SingleToInt32Bits((float)minPrecision) >> typeMantissaBits) & (LongPow(2, typeExponentBits + 1) - 1); 
 
             // This is the number of bits we need to represent the exponent range down from lowest non-zero value up to highest value
-            ushort bitsToRepresentRange = (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(emax - emin);
+            ushort bitsToRepresentRange = (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(maxExponent - minExponent);
             format.ExponentBits = Math.Min(typeExponentBits, (ushort)bitsToRepresentRange);
+            // We pick a bias so that for our lowest non zero representable value, the exponent encoded value is 1. This leaves open the value 0 to represent... actual 0!
+            // And also minimizes the amount of bits needed to encode our largest representable value.
             format.NewBias = typeBias - (int)minPrecisionExponentValue + 1;
 
             // As long as the mantissa is large enough to achieve our minimum precision for the highest exponent in value range, then it will also be enough for the lower exponent values.
-            float HighestIntervalLength = Mathf.Pow(2, emax) - Mathf.Pow(2, emax - 1);
+            float HighestIntervalLength = Mathf.Pow(2, maxExponent) - Mathf.Pow(2, maxExponent - 1);
             format.MantissaBits = Math.Min(typeMantissaBits, (ushort)BitpackingHelpers.FindNextPowerOf2Exponent(HighestIntervalLength / minPrecision));
 
             return format;

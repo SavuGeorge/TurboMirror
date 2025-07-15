@@ -353,15 +353,15 @@ namespace Mirror.Weaver
                     case "System.Boolean":
                         weaverBitCounter += 1;
 
+                        // Bitpacks one bit, pretty straightforward
                         // equivalent to: 
                         // BitpackingHelpers.WritePartialByte(writer, 1, value ? 1 : 0, ref bitOffset, ref currentByte);
-                        worker.Emit(OpCodes.Ldarg_0);  // Load writer (first param of generated method)
-                        worker.Emit(OpCodes.Ldc_I4_1); // Load 1 (bits to write)
+                        worker.Emit(OpCodes.Ldarg_0);                      // Load writer (first param of generated method)
+                        worker.Emit(OpCodes.Ldc_I4_1);                     // Load 1 (bits to write)
 
                         // Load field value and convert to byte
-                        worker.Emit(OpCodes.Ldarg_1);  // Load value object
-                        worker.Emit(OpCodes.Ldfld, field); // Get bool field
-                                                           // Convert bool to byte (0 or 1)
+                        worker.Emit(OpCodes.Ldarg_1);                      // Load value object
+                        worker.Emit(OpCodes.Ldfld, field);                 // Get bool field
 
                         worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);    // Load address of bitOffset
                         worker.Emit(OpCodes.Ldloca, currentByteVarIndex);  // Load address of currentByte
@@ -441,15 +441,15 @@ namespace Mirror.Weaver
 
 
                         // Generate IL: BitpackingHelpers.WriteIntegerHelper(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
-                        worker.Emit(OpCodes.Ldarg_0);                          // Load writer
-                        worker.Emit(OpCodes.Ldarg_1);                          // Load struct
-                        worker.Emit(OpCodes.Ldfld, fieldRef);                  // Load field value
-                        worker.Emit(OpCodes.Ldc_I4, integerTypeBits);          // Load typeBits
-                        worker.Emit((isSignedType && integerFormat.Signed) ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); // Load formatSigned
-                        worker.Emit(OpCodes.Ldc_I4, integerFormat.Bits);       // Load formatBits
-                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);        // Load address of bitOffset
-                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);      // Load address of currentByte
-                        worker.Emit(OpCodes.Call, writeIntegerHelperRef);      // Call helper
+                        worker.Emit(OpCodes.Ldarg_0);                                                               // Load writer
+                        worker.Emit(OpCodes.Ldarg_1);                                                               // Load struct
+                        worker.Emit(OpCodes.Ldfld, fieldRef);                                                       // Load field value
+                        worker.Emit(OpCodes.Ldc_I4, integerTypeBits);                                               // Load typeBits
+                        worker.Emit((isSignedType && integerFormat.Signed) ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0);  // Load formatSigned
+                        worker.Emit(OpCodes.Ldc_I4, integerFormat.Bits);                                            // Load formatBits
+                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);                                             // Load address of bitOffset
+                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);                                           // Load address of currentByte
+                        worker.Emit(OpCodes.Call, writeIntegerHelperRef);                                           // Call helper
                         break;
 
 
@@ -476,17 +476,17 @@ namespace Mirror.Weaver
                             bitpackingHelpersType, assembly, Log, helperMethodName, ref WeavingFailed);
 
                         // Generate IL: BitpackingHelpers.WriteXXXHelper(writer, value, formatSigned, exponentBits, biasExponent, mantissaBits, minPrecision, ref bitOffset, ref currentByte);
-                        worker.Emit(OpCodes.Ldarg_0);                                 // Load writer
-                        worker.Emit(OpCodes.Ldarg_1);                                 // Load struct
-                        worker.Emit(OpCodes.Ldfld, fieldRef);                         // Load field value
+                        worker.Emit(OpCodes.Ldarg_0);                                            // Load writer
+                        worker.Emit(OpCodes.Ldarg_1);                                            // Load struct
+                        worker.Emit(OpCodes.Ldfld, fieldRef);                                    // Load field value
                         worker.Emit(decimalFormat.Signed ? OpCodes.Ldc_I4_1 : OpCodes.Ldc_I4_0); // Load formatSigned 
-                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.ExponentBits);      // Load exponentBits
-                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.NewBias);           // Load biasOffset
-                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.MantissaBits);      // Load mantissaBits
-                        worker.Emit(OpCodes.Ldc_R8, decimalFormat.MinPrecision);      // Load minPrecision (double)
-                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);               // Load address of bitOffset
-                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);             // Load address of currentByte
-                        worker.Emit(OpCodes.Call, writeHelperRef);                    // Call helper
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.ExponentBits);                 // Load exponentBits
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.NewBias);                      // Load biasOffset
+                        worker.Emit(OpCodes.Ldc_I4, decimalFormat.MantissaBits);                 // Load mantissaBits
+                        worker.Emit(OpCodes.Ldc_R8, decimalFormat.MinPrecision);                 // Load minPrecision (double)
+                        worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);                          // Load address of bitOffset
+                        worker.Emit(OpCodes.Ldloca, currentByteVarIndex);                        // Load address of currentByte
+                        worker.Emit(OpCodes.Call, writeHelperRef);                               // Call helper
                         break;
 
 
@@ -507,35 +507,7 @@ namespace Mirror.Weaver
             return true; 
         }
 
-        /*
-        void WriteBitpackedBoolIL(NetworkWriter writer, bool value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
-        {
-            BitpackingHelpers.WritePartialByte(writer, 1, value ? (byte)1 : (byte)0, ref bitOffset, ref currentByte);
-        }
-        void WriteBitpackedUnsignedIntegerType(NetworkWriter writer, ulong value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
-        {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
-            format.Signed = false;
-            BitpackingHelpers.WriteIntegerHelper(writer, (long)value, format, ref bitOffset, ref currentByte);
-        }
-        void WriteBitpackedIntegerType(NetworkWriter writer, long value, FieldDefinition field, ref int bitOffset, ref byte currentByte)
-        {
-            BitpackingHelpers.IntegerFormatInfo format = BitpackingFormatHelpers.GetIntegerBitPackedFormat(field);
-            BitpackingHelpers.WriteIntegerHelper(writer, value, format, ref bitOffset, ref currentByte);
-        }
-
-        void WriteBitpackedFloatType(NetworkWriter writer, float value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
-        {
-            BitpackingHelpers.DecimalFormatInfo format = BitpackingFormatHelpers.GetDecimalFormatInfo(field);
-        }
-        void WriteBitpackedDoubleType(NetworkWriter writer, double value, FieldDefinition field, ref int bitOffset, ref List<byte> bytes)
-        {
-            BitpackingHelpers.DecimalFormatInfo format = BitpackingFormatHelpers.GetDecimalFormatInfo(field);
-        }
-        */
-
-
-
+   
         MethodDefinition GenerateCollectionWriter(TypeReference variable, TypeReference elementType, string writerFunction, ref bool WeavingFailed)
         {
             MethodDefinition writerFunc = GenerateWriterFunc(variable);

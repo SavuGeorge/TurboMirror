@@ -38,7 +38,7 @@ namespace Mirror.Core
 
 
         public static void WriteIntegerHelperByte(NetworkWriter writer, byte value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
-    => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
+            => WriteIntegerHelperCore(writer, value, typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
 
         public static void WriteIntegerHelperSByte(NetworkWriter writer, sbyte value, int typeBits, bool formatSigned, int formatBits, ref int bitOffset, ref byte currentByte)
             => WriteIntegerHelperCore(writer, unchecked((ulong)(long)value), typeBits, formatSigned, formatBits, ref bitOffset, ref currentByte);
@@ -81,7 +81,7 @@ namespace Mirror.Core
         }
 
         public static byte ReadIntegerHelperByte(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
-    => (byte)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte);
+            => (byte)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte);
 
         public static sbyte ReadIntegerHelperSByte(NetworkReader reader, bool formatSigned, int formatBits, int typeBits, ref int bitOffset, ref byte currentByte)
             => unchecked((sbyte)(long)ReadIntegerHelperCore(reader, formatSigned, formatBits, typeBits, ref bitOffset, ref currentByte));
@@ -145,7 +145,7 @@ namespace Mirror.Core
             // Exponent
             int oldExponent = (valuebits >> 23) & 0b011111111;
             int newExponent;
-            if (oldExponent == 0)
+            if (oldExponent == 0) // No bias conversion for 0, since it would make us underflow on the exponent
             {
                 newExponent = 0;
             }
@@ -155,11 +155,9 @@ namespace Mirror.Core
             }
             WritePartialByte(writer, exponentBits, (byte)(newExponent), ref bitOffset, ref currentByte);
 
-            // Mantissa - simplified to match reading pattern
             int mantissaBitsToWrite = mantissaBits;
             int mantissaDiscardedBits = 23 - mantissaBits;
             int alignedMantissa = valuebits >> mantissaDiscardedBits;
-
             while (mantissaBitsToWrite > 0)
             {
                 int currentWriteCount = Math.Min(8, mantissaBitsToWrite);
@@ -201,7 +199,6 @@ namespace Mirror.Core
                 mantissaValue = mantissaValue | ReadPartialByte(reader, currentReadCount, ref bitOffset, ref currentByte);
                 mantissaBitsToRead -= currentReadCount;
             }
-
             mantissaValue = mantissaValue << (23 - mantissaBits);
 
             // Reconstruct IEEE 754 representation using bit manipulation
@@ -224,7 +221,7 @@ namespace Mirror.Core
             // Exponent - now using precalculated bias like float
             int oldExponent = (int)((valuebits >> 52) & 0x7FF); // 11 bits
             int newExponent;
-            if (oldExponent == 0)
+            if (oldExponent == 0) // No bias conversion for 0, since it would make us underflow on the exponent
             {
                 newExponent = 0;
             }
@@ -243,11 +240,9 @@ namespace Mirror.Core
                 exponentBitsToWrite -= currentWriteCount;
             }
 
-            // Mantissa - simplified to match float pattern
             int mantissaBitsToWrite = mantissaBits;
             int mantissaDiscardedBits = 52 - mantissaBits;
             long alignedMantissa = valuebits >> mantissaDiscardedBits;
-
             while (mantissaBitsToWrite > 0)
             {
                 int currentWriteCount = Math.Min(8, mantissaBitsToWrite);
@@ -307,7 +302,6 @@ namespace Mirror.Core
             long reconstructedBits = (sign << 63) | ((long)exponentValue << 52) | mantissaValue;
             return BitConverter.Int64BitsToDouble(reconstructedBits);
         }
-
 
 
         // writes right-most (least significant bits) BITS from VALUE into BYTES

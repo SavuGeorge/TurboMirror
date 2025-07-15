@@ -357,15 +357,15 @@ namespace Mirror.Weaver
                         worker.Emit(variable.IsValueType ? OpCodes.Ldloca : OpCodes.Ldloc, 0);
 
                         // Call: BitpackingHelpers.ReadPartialByte(reader, 1, ref bitOffset, ref currentByte)
-                        worker.Emit(OpCodes.Ldarg_0);  // Load reader
-                        worker.Emit(OpCodes.Ldc_I4_1); // Load 1 (bits to read)
+                        worker.Emit(OpCodes.Ldarg_0);                      // Load reader
+                        worker.Emit(OpCodes.Ldc_I4_1);                     // Load 1 (bits to read)
                         worker.Emit(OpCodes.Ldloca, bitOffsetVarIndex);    // Load address of bitOffset
                         worker.Emit(OpCodes.Ldloca, currentByteVarIndex);  // Load address of currentByte
                         worker.Emit(OpCodes.Call, readPartialByteRef);
 
                         // Convert byte result to bool and store in field
                         worker.Emit(OpCodes.Ldc_I4_0);
-                        worker.Emit(OpCodes.Cgt_Un); // Convert to bool (1 becomes true, 0 becomes false)
+                        worker.Emit(OpCodes.Cgt_Un);                       // Convert to bool (1 becomes true, 0 becomes false)
 
                         worker.Emit(OpCodes.Stfld, assembly.MainModule.ImportReference(field));
                         break;
